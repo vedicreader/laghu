@@ -4,14 +4,14 @@
 __all__ = ['log', 'LAYOUTS', 'ST_DTYPES', 'SENTENCES', 'ODD', 'cached', 'resolve', 'layout', 'model_files', 'UnsupportedDtype',
            'st_header', 'st_map', 'st_write', 'find_vocab', 'is_unigram', 'try_resolve', 'noise', 'corpus']
 
-# %% ../nbs/00_core.ipynb #7a31cb1e
+# %% ../nbs/00_core.ipynb #fd476c3c
 import json, re, mmap, logging, numpy as np
 from pathlib import Path
 from fastcore.all import AttrDict, ifnone
 
 log = logging.getLogger('laghu')
 
-# %% ../nbs/00_core.ipynb #bf563aaf
+# %% ../nbs/00_core.ipynb #9073650b
 def cached(repo):
     "The newest cached snapshot of Hugging Face repo `repo`, or None."
     if repo.count('/') != 1: return None
@@ -30,7 +30,7 @@ def resolve(path, token=None, subfolder=None, force_download=False):
         p = Path(snapshot_download(Path(path).as_posix(), repo_type='model', token=token))
     return p/subfolder if subfolder else p
 
-# %% ../nbs/00_core.ipynb #07a37f02
+# %% ../nbs/00_core.ipynb #b57979e0
 def layout(folder):
     "The config, table and tokenizer files of the first layout `folder` has, and the table's tensor name, or None."
     folder = Path(folder)
@@ -46,7 +46,7 @@ def model_files(folder):
     if f := layout(folder): return f
     raise FileNotFoundError(f'{folder}: no model2vec, sentence-transformers or 0_StaticEmbedding layout')
 
-# %% ../nbs/00_core.ipynb #6a319592
+# %% ../nbs/00_core.ipynb #86a0c03a
 ST_DTYPES = dict(F64=np.float64, F32=np.float32, F16=np.float16, I64=np.int64, I32=np.int32, I16=np.int16, I8=np.int8, U8=np.uint8)
 
 class UnsupportedDtype(ValueError): "A tensor in a dtype numpy cannot hold."
@@ -68,7 +68,7 @@ def st_map(fn, names):
         return m
     return [_m(k) for k in names]
 
-# %% ../nbs/00_core.ipynb #04503450
+# %% ../nbs/00_core.ipynb #4ea0cd84
 _NP2ST = {np.dtype(v): k for k, v in ST_DTYPES.items()}
 
 def st_write(fn, tensors):
@@ -81,7 +81,7 @@ def st_write(fn, tensors):
     Path(fn).parent.mkdir(parents=True, exist_ok=True)
     with open(fn, 'wb') as f: f.write(len(h).to_bytes(8, 'little')); f.write(h); [f.write(b) for b in bufs]
 
-# %% ../nbs/00_core.ipynb #0c4d76c8
+# %% ../nbs/00_core.ipynb #ad1cbbef
 _MODEL = re.compile(rb'"model"\s*:\s*\{')
 _VOCAB = re.compile(rb'"vocab"\s*:\s*([\[{])')
 
@@ -96,13 +96,13 @@ def is_unigram(fn):
     "Whether tokenizer.json `fn` holds a Unigram model."
     with open(fn, 'rb') as f, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as t: return find_vocab(t)[1] == b'['
 
-# %% ../nbs/00_core.ipynb #66a0f864
+# %% ../nbs/00_core.ipynb #13167816
 def try_resolve(repo, **kw):
     "`resolve(repo)`, or None (logged) when it cannot be had, e.g. offline."
     try: return resolve(repo, **kw)
     except Exception as e: log.warning(f'laghu: {repo} unavailable: {e!r}'); return None
 
-# %% ../nbs/00_core.ipynb #a1e697e0
+# %% ../nbs/00_core.ipynb #b4cc1c2d
 SENTENCES = [
     'The quick brown fox jumps over the lazy dog.', "It's 3:45 p.m. on 2026-10-05; the price is $1,299.99 (incl. 18% GST).",
     'Les élèves ont étudié l’histoire de la Révolution française.', 'Größere Äpfel schmecken süßer als kleinere, sagt Jürgen.',

@@ -3,14 +3,14 @@
 # %% auto #0
 __all__ = ['UNK_PENALTY', 'WS', 'read_vocab', 'viterbi', 'Added', 'Unigram', 'HFTok', 'tokenizer']
 
-# %% ../nbs/01_unigram.ipynb #525e1912
+# %% ../nbs/01_unigram.ipynb #d9193c51
 import json, re, mmap, numpy as np
 from array import array
 from tokenizers import Tokenizer, PreTokenizedString
 from fastcore.all import ifnone
 from .core import log, find_vocab, is_unigram
 
-# %% ../nbs/01_unigram.ipynb #f61705d5
+# %% ../nbs/01_unigram.ipynb #60cb7473
 _ENTRY = re.compile(rb'\s*\[\s*"((?:[^"\\]|\\.)*)"\s*,\s*([^\],\s]+)\s*\]\s*(,?)')
 _CLOSE = re.compile(rb'\s*\]')
 
@@ -26,7 +26,7 @@ def read_vocab(fn):
         if not (c := _CLOSE.match(t, at)): raise ValueError(f'{fn}: vocabulary not read to its end (stopped at byte {at})')
         return ids, scores, json.loads(t[:v0] + t[c.start():])
 
-# %% ../nbs/01_unigram.ipynb #fb22414d
+# %% ../nbs/01_unigram.ipynb #e3c950b2
 UNK_PENALTY = 10.0
 
 def _unk(p, ids, unk_id, byte_fallback):
@@ -61,7 +61,7 @@ def viterbi(s, ids, scores, reach, unk_id, unk_score, byte_fallback=False):
         if run and e == 0: out += _unk(s[:run], ids, unk_id, byte_fallback)[::-1]
     return out[::-1]
 
-# %% ../nbs/01_unigram.ipynb #e8374579
+# %% ../nbs/01_unigram.ipynb #a88855f9
 WS = frozenset('\t\n\x0b\x0c\r \x85\xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000')   # Rust's char::is_whitespace
 
 def _metaspace(pt, scheme):
@@ -180,7 +180,7 @@ class Unigram:
         "`Tokenizer.get_vocab()`: piece → id, the added tokens over the model's."
         return {**self.ids, **self.added}
 
-# %% ../nbs/01_unigram.ipynb #9a6513ec
+# %% ../nbs/01_unigram.ipynb #4946b03a
 class HFTok:
     "`tokenizers`' own encoding, as model2vec calls it."
     def __init__(self, fn):
