@@ -1,0 +1,14 @@
+project:
+  output-dir: _docs
+
+website:
+  title: "laghu"
+  site-url: "https://vedicreader.github.io/laghu"
+  description: "model2vec static models in a fraction of the memory, with the same vectors"
+  repo-branch: main
+  repo-url: "https://github.com/vedicreader/laghu"
+
+format-links:
+  - html
+  - format: commonmark
+    text: Markdown

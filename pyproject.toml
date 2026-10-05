@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "laghu"
+dynamic = ["version"]
+description = "model2vec static models in a fraction of the memory, with the same vectors"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [{name = "Karthik", email = "karthik.rajgopal@hotmail.com"}]
+keywords = ['nbdev', 'model2vec', 'embeddings', 'static-embeddings', 'mmap', 'tokenizers', 'unigram']
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "fastcore>=1.8",
+    "numpy>=1.24",
+    "tokenizers>=0.20",
+    "huggingface-hub>=0.24",
+]
+
+[project.urls]
+Repository = "https://github.com/vedicreader/laghu"
+Documentation = "https://vedicreader.github.io/laghu/"
+
+[project.entry-points.nbdev]
+laghu = "laghu._modidx:d"
+
+[tool.nbdev]
+tst_flags = "slow"
+
+[tool.hatch.build.targets.wheel]
+packages = ["laghu"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/laghu", "/README.md", "/pyproject.toml"]
+
+[tool.hatch.version]
+path = "laghu/__init__.py"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "model2vec>=0.9",
+    "nbdev>=3.3.14",
+    "notebook>=7.6.3",
+]
