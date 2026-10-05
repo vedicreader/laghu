@@ -3,11 +3,11 @@
 # %% auto #0
 __all__ = ['footprint', 'measure', 'check', 'row', 'same', 'table']
 
-# %% ../nbs/03_bench.ipynb #a5761295
+# %% ../nbs/03_bench.ipynb #630431fe
 import json, sys, os, ctypes, platform, subprocess
 from fastcore.all import AttrDict
 
-# %% ../nbs/03_bench.ipynb #428a6728
+# %% ../nbs/03_bench.ipynb #ad5d5182
 def footprint():
     "This process's resident, private and peak memory in MB."
     if platform.system() == 'Darwin':
@@ -18,7 +18,7 @@ def footprint():
     mb = lambda k: int(kv[k].split()[0]) / 1024
     return AttrDict(rss=mb('VmRSS'), private=mb('RssAnon'), peak=mb('VmHWM'))
 
-# %% ../nbs/03_bench.ipynb #c356fd3f
+# %% ../nbs/03_bench.ipynb #b4cc8766
 _PROBE = '''
 import json, time
 from laghu.bench import footprint
@@ -65,7 +65,7 @@ def row(path, n_check=3000, n_speed=2000):
     r.m2v, r.lg = measure(path, 'model2vec', n_speed), measure(path, 'laghu', n_speed)
     return r
 
-# %% ../nbs/03_bench.ipynb #9688cb97
+# %% ../nbs/03_bench.ipynb #33c0bdb7
 def same(r): return all(r[k] for k in ('ids', 'dtype', 'f32', 'f16', 'exact', 'seq', 'median', 'unk', 'tokens'))
 
 def table(rows):
