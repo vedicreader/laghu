@@ -23,6 +23,10 @@ measurement only and is never imported by the others.
 does not reproduce, it raises `NotImplementedError` and the caller uses `tokenizers` (`HFTok`); the table is mapped either way. Every
 new feature gets a variant in `01_unigram`'s tests, compared against `encode_batch` on `corpus()` in batches of 64.
 
+`Unigram.word` caches a pre-token's ids; that is exact only because `viterbi` depends on the pre-token alone. Cutting a pre-token
+further (at `▁`, say) changes where the float sums start and breaks exact ties the other way: measured, one text in 4,726 differs.
+The spike at the end of `03_bench` records what else was tried (tokie, gigatoken, worker processes) and why none is used.
+
 ## Tests need models
 
 The tests download models from the Hub through `try_resolve`, which returns None offline, so a cell skips rather than fails. The
