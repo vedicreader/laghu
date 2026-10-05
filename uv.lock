@@ -1259,6 +1259,11 @@ dependencies = [
     { name = "tokenizers" },
 ]
 
+[package.optional-dependencies]
+fallback = [
+    { name = "model2vec" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "ipykernel", version = "7.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -1272,9 +1277,11 @@ dev = [
 requires-dist = [
     { name = "fastcore", specifier = ">=1.8" },
     { name = "huggingface-hub", specifier = ">=0.24" },
+    { name = "model2vec", marker = "extra == 'fallback'", specifier = ">=0.9" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "tokenizers", specifier = ">=0.20" },
 ]
+provides-extras = ["fallback"]
 
 [package.metadata.requires-dev]
 dev = [

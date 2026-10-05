@@ -3,14 +3,14 @@
 # %% auto #0
 __all__ = ['LeanModel', 'load', 'same_as_model2vec']
 
-# %% ../nbs/02_encoder.ipynb #498054bd
+# %% ../nbs/02_encoder.ipynb #07e60f33
 import json, numpy as np
 from pathlib import Path
 from fastcore.all import ifnone, patch
 from .core import log, resolve, model_files, st_map
 from .unigram import tokenizer, Unigram
 
-# %% ../nbs/02_encoder.ipynb #83c6bf4f
+# %% ../nbs/02_encoder.ipynb #bf662691
 class LeanModel:
     "model2vec's `StaticModel` for reading a model, with its table mapped from the file and, for Unigram, no trie."
     def __init__(self, folder, normalize=None, lean=True):
@@ -45,7 +45,7 @@ class LeanModel:
     def __repr__(self):
         return f"{type(self).__name__}({str(self.folder)!r}, {len(self.embedding)}×{self.dim} {self.embedding_dtype}, {'unigram' if self.lean else 'tokenizers'})"
 
-# %% ../nbs/02_encoder.ipynb #dff3a1b5
+# %% ../nbs/02_encoder.ipynb #6fb7680d
 def _batches(xs, bs): return (xs[i:i + bs] for i in range(0, len(xs), bs))
 
 @patch
@@ -85,7 +85,7 @@ def encode_as_sequence(self:LeanModel, sentences, max_length=None, batch_size=10
     out = [self._rows(o) if o else np.zeros((0, self.dim)) for b in _batches(xs, batch_size) for o in self.tokenize(b, max_length)]
     return out[0] if one else out
 
-# %% ../nbs/02_encoder.ipynb #e42dafed
+# %% ../nbs/02_encoder.ipynb #e91068cb
 def load(path, normalize=None, token=None, subfolder=None, force_download=False, lean=True, fallback=True):
     "A `LeanModel` for `path`, else model2vec's `StaticModel` with a logged warning; `fallback=False` raises instead."
     try: return LeanModel.from_pretrained(path, token=token, normalize=normalize, subfolder=subfolder, force_download=force_download, lean=lean)
@@ -97,7 +97,7 @@ def load(path, normalize=None, token=None, subfolder=None, force_download=False,
             return StaticModel.from_pretrained(path, token=token, normalize=normalize, subfolder=subfolder, force_download=force_download)
         except Exception as e2: raise e from e2
 
-# %% ../nbs/02_encoder.ipynb #698a247b
+# %% ../nbs/02_encoder.ipynb #c807791f
 def same_as_model2vec(path, txts=None, max_length=512, seq=200):
     "Whether `load(path)` matches model2vec on `txts` (default `corpus()`): a dict of the checks."
     from model2vec import StaticModel
