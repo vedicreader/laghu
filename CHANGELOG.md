@@ -7,7 +7,7 @@
 First release.
 
 - `load` and `LeanModel` read a model2vec static model with `StaticModel`'s `encode`, `encode_as_sequence`, `tokenize`, `tokens`, `dim`, `median_token_length` and `unk_token_id`, and give model2vec's ids and vectors bit for bit.
-- The embedding table, and a quantized model's `weights` and `mapping`, are memory-mapped read-only from `model.safetensors`, so processes share one copy in the page cache.
+- The embedding table, and a quantized model's `weights` and `mapping`, are memory-mapped read-only from `model.safetensors`. Processes share one copy in the page cache.
 - `Unigram` tokenizes a Unigram tokenizer.json with a Viterbi pass over a dict of pieces instead of `tokenizers`' trie: potion-multilingual-128M takes 135 MB of private memory a process instead of 1,348 MB. Added tokens (`lstrip`, `rstrip`, `normalized`), byte fallback, Metaspace `prepend_scheme`, truncation and padding follow `tokenizers`.
 - A cache of segmented pre-tokens makes natural text 1.6 to 1.9 times faster on a first pass for word-splitting tokenizers.
 - WordPiece, BPE and WordLevel models, and Unigram files using `single_word` added tokens, tokenize with `tokenizers`; the table is still mapped.
