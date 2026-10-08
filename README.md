@@ -31,6 +31,8 @@ m.tokenize(['hello world'])
 m.encode_as_sequence('hello world').shape          # (n_tokens, 256)
 ```
 
+    (2, 256)
+
 [`load`](https://vedicreader.github.io/laghu/encoder.html#load) returns a [`LeanModel`](https://vedicreader.github.io/laghu/encoder.html#leanmodel). If loading fails, it logs the cause and tries model2vec’s `StaticModel`. This fallback needs `laghu[fallback]`. If the fallback also fails, [`load`](https://vedicreader.github.io/laghu/encoder.html#load) raises the original laghu error. `load(..., fallback=False)` raises without trying model2vec. Both loaders refuse bfloat16 and float8 tables because numpy cannot hold those dtypes.
 
 `same_as_model2vec(path)` loads a model both ways and compares them on the built-in corpus, or on texts of your own:
@@ -39,6 +41,21 @@ m.encode_as_sequence('hello world').shape          # (n_tokens, 256)
 from laghu import same_as_model2vec
 same_as_model2vec('minishlab/potion-base-8M', ['my', 'own texts'])
 ```
+
+    /Users/71293/code/personal/orgs/laghu/.venv/lib/python3.13/site-packages/tqdm/auto.py:21: TqdmWarning: IProgress not found. Please update jupyter and ipywidgets. See https://ipywidgets.readthedocs.io/en/stable/user_install.html
+      from .autonotebook import tqdm as notebook_tqdm
+
+    {'lean': False,
+     'n': 2,
+     'ids': True,
+     'dtype': True,
+     'f32': True,
+     'f16': True,
+     'exact': True,
+     'seq': True,
+     'median': True,
+     'unk': True,
+     'tokens': True}
 
 It checks the token ids, the vectors cast to float32 and to float16, the exact dtype and bits, `encode_as_sequence`,
 `median_token_length`, the unknown token id and the token list.
