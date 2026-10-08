@@ -13,14 +13,12 @@ WordPiece, BPE and word-level models still use `tokenizers`. laghu maps their em
 
 ## Install
 
-Not on PyPI yet. From a checkout:
-
 ``` sh
-uv add ../laghu
+uv add laghu        # or: pip install laghu
 ```
 
 model2vec itself is not a dependency. For the fallback described below, and for [`same_as_model2vec`](https://vedicreader.github.io/laghu/encoder.html#same_as_model2vec), install the extra:
-`uv add '../laghu[fallback]'`.
+`uv add 'laghu[fallback]'`.
 
 ## Use
 
