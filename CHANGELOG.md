@@ -2,6 +2,10 @@
 
 <!-- do not remove -->
 
+## 0.1.1
+
+- Plainer, shorter prose in the README and notebooks. No code changes.
+
 ## 0.1.0
 
 First release.
