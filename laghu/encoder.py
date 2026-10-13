@@ -12,13 +12,13 @@ from .unigram import tokenizer, Unigram
 
 # %% ../nbs/02_encoder.ipynb #bf662691
 class LeanModel:
-    "model2vec's `StaticModel` for reading a model, with its table mapped from the file and, for Unigram, no trie."
-    def __init__(self, folder, normalize=None, lean=True):
+    "model2vec's `StaticModel` for reading a model, with its table and, for Unigram, its vocabulary mapped from files."
+    def __init__(self, folder, normalize=None, lean=True, shared=True):
         f = model_files(folder); self.folder = Path(folder)
         self.config = json.loads(f.cfg.read_text())
         self.embedding, self.weights, self.token_mapping = st_map(f.emb, [f.name, 'weights', 'mapping'])
         if self.embedding is None: raise KeyError(f'{f.emb}: no tensor {f.name!r}')
-        self.tokenizer = tokenizer(f.tok, lean)
+        self.tokenizer = tokenizer(f.tok, lean, shared)
         if self.token_mapping is None and self.tokenizer.n != len(self.embedding):
             raise ValueError(f'Number of tokens ({self.tokenizer.n}) does not match number of vectors ({len(self.embedding)}).')
         self.median_token_length, self.unk_token_id = self.tokenizer.median, self.tokenizer.unk_token_id
@@ -26,9 +26,9 @@ class LeanModel:
         self.config['normalize'] = self.normalize
 
     @classmethod
-    def from_pretrained(cls, path, token=None, normalize=None, subfolder=None, force_download=False, lean=True):
+    def from_pretrained(cls, path, token=None, normalize=None, subfolder=None, force_download=False, lean=True, shared=True):
         "A `LeanModel` for a folder or Hugging Face repo id `path`; a cached repo loads without the network."
-        return cls(resolve(path, token=token, subfolder=subfolder, force_download=force_download), normalize=normalize, lean=lean)
+        return cls(resolve(path, token=token, subfolder=subfolder, force_download=force_download), normalize=normalize, lean=lean, shared=shared)
 
     @property
     def dim(self): return self.embedding.shape[1]
@@ -86,9 +86,9 @@ def encode_as_sequence(self:LeanModel, sentences, max_length=None, batch_size=10
     return out[0] if one else out
 
 # %% ../nbs/02_encoder.ipynb #e91068cb
-def load(path, normalize=None, token=None, subfolder=None, force_download=False, lean=True, fallback=True):
+def load(path, normalize=None, token=None, subfolder=None, force_download=False, lean=True, shared=True, fallback=True):
     "A `LeanModel` for `path`, else model2vec's `StaticModel` with a logged warning; `fallback=False` raises instead."
-    try: return LeanModel.from_pretrained(path, token=token, normalize=normalize, subfolder=subfolder, force_download=force_download, lean=lean)
+    try: return LeanModel.from_pretrained(path, token=token, normalize=normalize, subfolder=subfolder, force_download=force_download, lean=lean, shared=shared)
     except Exception as e:
         if not fallback: raise
         log.warning(f'laghu: cannot read {path} ({e!r}); loading it with model2vec instead')
