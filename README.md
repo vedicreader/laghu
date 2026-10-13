@@ -7,7 +7,7 @@ A [model2vec](https://github.com/MinishLab/model2vec) static embedding model loa
 
 model2vec reads the embedding table into each process. For potion-multilingual-128M, the table takes 512 MB. Its Unigram tokenizer adds a character trie over 500,353 pieces, about another 610 MB. After encoding, the process uses about 1.3 GB of private memory.
 
-laghu maps the table read-only from `model.safetensors`. Processes share the mapped pages through the operating system’s page cache. The operating system can reclaim clean pages under memory pressure. For supported Unigram models, laghu replaces the trie with Python Viterbi over a dict of pieces. The normalizer and pre-tokenizer come from `tokenizers`, built from the same tokenizer.json with the vocabulary removed. The same model then takes about 135 MB of private memory per process.
+laghu maps the table read-only from `model.safetensors`. Processes share the mapped pages through the operating system’s page cache. The operating system can reclaim clean pages under memory pressure. For supported Unigram models, laghu replaces the trie with Python Viterbi over a vocabulary file it builds once per tokenizer.json: a marisa trie of the pieces with their ids and scores, which every process maps and shares like the table. The normalizer and pre-tokenizer come from `tokenizers`, built from the same tokenizer.json with the vocabulary removed. The same model then takes about 60 MB of private memory per process, most of it the interpreter and its imports.
 
 WordPiece, BPE and word-level models still use `tokenizers`. laghu maps their embedding tables but does not replace their tokenizers. The memory saving depends on the table’s size relative to the tokenizer.
 
@@ -34,6 +34,8 @@ m.encode_as_sequence('hello world').shape          # (n_tokens, 256)
     (2, 256)
 
 [`load`](https://vedicreader.github.io/laghu/encoder.html#load) returns a [`LeanModel`](https://vedicreader.github.io/laghu/encoder.html#leanmodel). If loading fails, it logs the cause and tries model2vec’s `StaticModel`, which needs `laghu[fallback]`. If the fallback also fails, [`load`](https://vedicreader.github.io/laghu/encoder.html#load) raises the original laghu error. `load(..., fallback=False)` raises without trying model2vec. Both loaders refuse bfloat16 and float8 tables because numpy cannot hold those dtypes.
+
+A Unigram model’s vocabulary file goes in `$LAGHU_CACHE`, else `$XDG_CACHE_HOME/laghu`, else `~/.cache/laghu`, and beside tokenizer.json when the cache cannot be written. The first load builds it in a second or two; later loads, in any process, map it in a few hundredths of a second. A changed tokenizer.json or a damaged file is built again. `load(..., shared=False)` keeps the vocabulary in a dict instead, about 80 MB more per process.
 
 `same_as_model2vec(path)` loads a model both ways and compares them on the built-in corpus, or on texts of your own:
 
@@ -74,7 +76,7 @@ Every model below matches model2vec’s ids and vectors, bit for bit, on 4,726 t
 | potion-science-8M | WordPiece | tokenizers | 29,528 × 256 | float32 | on | yes | 113 → 70 | 114 → 70 | 81,008 → 84,532 |
 | potion-code-16M | WordPiece | tokenizers | 61,826 × 256 | float32 +map +weights | on | yes | 147 → 110 | 211 → 117 | 10,674 → 10,425 |
 | potion-code-16M-v2 | WordPiece | tokenizers | 63,457 × 256 | float16 | on | yes | 108 → 101 | 186 → 119 | 21,819 → 22,164 |
-| potion-multilingual-128M | Unigram | Python Viterbi | 500,353 × 256 | float32 | on | yes | 1,348 → 135 | 1,348 → 135 | 39,105 → 12,795 |
+| potion-multilingual-128M | Unigram | Python Viterbi | 500,353 × 256 | float32 | on | yes | 1,348 → 61 | 1,348 → 61 | 39,105 → 10,902 |
 | M2V_base_output | WordPiece | tokenizers | 29,528 × 256 | float32 | off | yes | 112 → 69 | 113 → 69 | 65,460 → 87,100 |
 | M2V_multilingual_output | WordPiece | tokenizers | 501,054 × 256 | float32 | off | yes | 834 → 198 | 842 → 295 | 42,565 → 90,283 |
 | M2V_base_glove | WordLevel | tokenizers | 400,002 × 256 | float32 | off | yes | 656 → 186 | 656 → 194 | 67,028 → 85,058 |
@@ -92,6 +94,8 @@ Every model below matches model2vec’s ids and vectors, bit for bit, on 4,726 t
 | ovos-m2v-intents-pt-PT-albertina-v5 | BPE | tokenizers | 50,262 × 256 | float32 | on | yes | 162 → 90 | 162 → 90 | 46,343 → 22,813 |
 | F2LLM-v2-330M-model2vec | BPE | tokenizers | 151,644 × 512 | float16 | on | yes | 356 → 171 | 356 → 171 | 28,795 → 40,132 |
 | static-retrieval-multilingual-69m-v1 | BPE | tokenizers | 179,936 × 384 | float32 | off | yes | 537 → 229 | 541 → 263 | 32,235 → 31,848 |
+
+The potion-multilingual-128M row was measured again on 2026-10-13 with the shared vocabulary file. The other Unigram rows were measured with the vocabulary in a dict, which cost potion-multilingual-128M about 80 MB more private memory per process.
 
 Unigram throughput ranges from about a third of model2vec’s rate to about the same. `tokenizers` parallelizes batches across cores. Python Viterbi runs on one core. These batch measurements do not establish latency for one query.
 
