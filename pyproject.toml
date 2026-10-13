@@ -24,6 +24,7 @@ dependencies = [
     "numpy>=1.24",
     "tokenizers>=0.20",
     "huggingface-hub>=0.24",
+    "marisa-trie>=1.2",
 ]
 
 [project.optional-dependencies]

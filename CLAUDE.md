@@ -27,6 +27,12 @@ new feature gets a variant in `01_unigram`'s tests, compared against `encode_bat
 further (at `▁`, say) changes where the float sums start and breaks exact ties the other way: measured, one text in 4,726 differs.
 The spike at the end of `03_bench` records what else was tried (tokie, gigatoken, worker processes) and why none is used.
 
+## The vocabulary file
+
+`shared_vocab` maps a Unigram vocabulary from a file built once per tokenizer.json: a marisa trie of the pieces, with the ids and float64
+scores in its key order (`01_unigram`). Bump `VOCAB_VERSION` whenever the layout or what goes into it changes, so old files are built
+again. `shared=False` keeps the dict path; both are tested against `tokenizers`.
+
 ## Tests need models
 
 The tests download models from the Hub through `try_resolve`, which returns None offline, so a cell skips rather than fails. The
