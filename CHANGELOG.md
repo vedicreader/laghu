@@ -2,6 +2,11 @@
 
 <!-- do not remove -->
 
+## 0.2.1
+
+- The `fallback` extra installs model2vec below 0.10. model2vec 0.10 gives different vectors, and its `StaticModel.tokenize` no longer takes `max_length`.
+- `same_as_model2vec` raises `ImportError` with model2vec 0.10 instead of failing partway with `TypeError`.
+
 ## 0.1.1
 
 - Plainer, shorter prose in the README and notebooks. No code changes.
