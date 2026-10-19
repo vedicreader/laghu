@@ -29,6 +29,7 @@ dependencies = [
 
 [project.optional-dependencies]
 fallback = ["model2vec>=0.9"]
+dev = ["ipykernel>=7.3.0", "model2vec>=0.9,<0.10", "nbdev>=3.3.14", "notebook>=7.6.3"]
 
 [project.urls]
 Repository = "https://github.com/vedicreader/laghu"
@@ -50,9 +51,4 @@ include = ["/laghu", "/README.md", "/pyproject.toml"]
 path = "laghu/__init__.py"
 
 [dependency-groups]
-dev = [
-    "ipykernel>=7.3.0",
-    "model2vec>=0.9",
-    "nbdev>=3.3.14",
-    "notebook>=7.6.3",
-]
+dev = ["laghu[dev]"]

@@ -1261,11 +1261,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-fallback = [
-    { name = "model2vec" },
-]
-
-[package.dev-dependencies]
 dev = [
     { name = "ipykernel", version = "7.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "ipykernel", version = "7.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -1273,25 +1268,32 @@ dev = [
     { name = "nbdev" },
     { name = "notebook" },
 ]
+fallback = [
+    { name = "model2vec" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "laghu", extra = ["dev"] },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "fastcore", specifier = ">=1.8" },
     { name = "huggingface-hub", specifier = ">=0.24" },
+    { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=7.3.0" },
     { name = "marisa-trie", specifier = ">=1.2" },
+    { name = "model2vec", marker = "extra == 'dev'", specifier = ">=0.9,<0.10" },
     { name = "model2vec", marker = "extra == 'fallback'", specifier = ">=0.9" },
+    { name = "nbdev", marker = "extra == 'dev'", specifier = ">=3.3.14" },
+    { name = "notebook", marker = "extra == 'dev'", specifier = ">=7.6.3" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "tokenizers", specifier = ">=0.20" },
 ]
-provides-extras = ["fallback"]
+provides-extras = ["dev", "fallback"]
 
 [package.metadata.requires-dev]
-dev = [
-    { name = "ipykernel", specifier = ">=7.3.0" },
-    { name = "model2vec", specifier = ">=0.9" },
-    { name = "nbdev", specifier = ">=3.3.14" },
-    { name = "notebook", specifier = ">=7.6.3" },
-]
+dev = [{ name = "laghu", extras = ["dev"] }]
 
 [[package]]
 name = "lark"
