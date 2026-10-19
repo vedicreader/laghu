@@ -17,7 +17,7 @@ Models whose tokenizer is WordPiece, BPE or word-level keep using `tokenizers` f
 uv add laghu        # or: pip install laghu
 ```
 
-model2vec is not a dependency. Install the extra, `uv add 'laghu[fallback]'`, if you want [`load`](https://vedicreader.github.io/laghu/encoder.html#load) to fall back to model2vec when laghu cannot read a model, or want to use [`same_as_model2vec`](https://vedicreader.github.io/laghu/encoder.html#same_as_model2vec).
+model2vec is not a dependency. Install the extra, `uv add 'laghu[fallback]'`, if you want [`load`](https://vedicreader.github.io/laghu/encoder.html#load) to fall back to model2vec when laghu cannot read a model, or want to use [`same_as_model2vec`](https://vedicreader.github.io/laghu/encoder.html#same_as_model2vec). The extra installs model2vec 0.9, which laghu matches. model2vec 0.10 gives different vectors, and its `tokenize` no longer takes `max_length`.
 
 ## Use
 

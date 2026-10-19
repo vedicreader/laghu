@@ -4,7 +4,7 @@
 __all__ = ['LeanModel', 'load', 'same_as_model2vec']
 
 # %% ../nbs/02_encoder.ipynb #07e60f33
-import json, numpy as np
+import json, inspect, numpy as np
 from pathlib import Path
 from fastcore.all import ifnone, patch
 from .core import log, resolve, model_files, st_map
@@ -102,6 +102,8 @@ def same_as_model2vec(path, txts=None, max_length=512, seq=200):
     "Compare `load(path)` with model2vec on `txts`, default `corpus()`, returning a dict of the checks."
     from model2vec import StaticModel
     from laghu.core import corpus
+    if 'max_length' not in inspect.signature(StaticModel.tokenize).parameters:
+        raise ImportError('same_as_model2vec needs model2vec 0.9, whose `StaticModel.tokenize` takes `max_length`: install `laghu[fallback]`')
     txts = ifnone(txts, corpus())
     lm, sm = load(path, fallback=False), StaticModel.from_pretrained(str(resolve(path)), force_download=False)
     a, b = lm.encode(txts, max_length=max_length), sm.encode(txts, max_length=max_length)

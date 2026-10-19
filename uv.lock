@@ -1284,7 +1284,7 @@ requires-dist = [
     { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=7.3.0" },
     { name = "marisa-trie", specifier = ">=1.2" },
     { name = "model2vec", marker = "extra == 'dev'", specifier = ">=0.9,<0.10" },
-    { name = "model2vec", marker = "extra == 'fallback'", specifier = ">=0.9" },
+    { name = "model2vec", marker = "extra == 'fallback'", specifier = ">=0.9,<0.10" },
     { name = "nbdev", marker = "extra == 'dev'", specifier = ">=3.3.14" },
     { name = "notebook", marker = "extra == 'dev'", specifier = ">=7.6.3" },
     { name = "numpy", specifier = ">=1.24" },
