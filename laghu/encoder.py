@@ -12,7 +12,7 @@ from .unigram import tokenizer, Unigram
 
 # %% ../nbs/02_encoder.ipynb #bf662691
 class LeanModel:
-    "model2vec's `StaticModel` for reading a model, with its table and, for Unigram, its vocabulary mapped from files."
+    "A stand-in for model2vec's `StaticModel` that maps its table, and a Unigram vocabulary, from files instead of loading them."
     def __init__(self, folder, normalize=None, lean=True, shared=True):
         f = model_files(folder); self.folder = Path(folder)
         self.config = json.loads(f.cfg.read_text())
@@ -27,7 +27,7 @@ class LeanModel:
 
     @classmethod
     def from_pretrained(cls, path, token=None, normalize=None, subfolder=None, force_download=False, lean=True, shared=True):
-        "A `LeanModel` for a folder or Hugging Face repo id `path`; a cached repo loads without the network."
+        "A `LeanModel` for a folder or Hugging Face repo id `path`, loading a cached repo offline."
         return cls(resolve(path, token=token, subfolder=subfolder, force_download=force_download), normalize=normalize, lean=lean, shared=shared)
 
     @property
@@ -38,7 +38,7 @@ class LeanModel:
     def lean(self): return isinstance(self.tokenizer, Unigram)
     @property
     def tokens(self):
-        "Every token, in id order, as `StaticModel.tokens`."
+        "Every token in id order, as `StaticModel.tokens` gives them."
         if not hasattr(self, '_tokens'): v = self.tokenizer.vocab(); self._tokens = tuple(sorted(v, key=v.get))
         return self._tokens
 
@@ -50,7 +50,7 @@ def _batches(xs, bs): return (xs[i:i + bs] for i in range(0, len(xs), bs))
 
 @patch
 def tokenize(self:LeanModel, sentences, max_length=None):
-    "The ids of each of `sentences`, as `StaticModel.tokenize`."
+    "The token ids of each text in `sentences`, as `StaticModel.tokenize` gives them."
     if max_length is not None: m = max_length * self.median_token_length; sentences = [s[:m] for s in sentences]
     ids = self.tokenizer(sentences)
     if self.unk_token_id is not None: ids = [[k for k in o if k != self.unk_token_id] for o in ids]
@@ -58,19 +58,19 @@ def tokenize(self:LeanModel, sentences, max_length=None):
 
 @patch
 def _rows(self:LeanModel, ids):
-    "The vectors of `ids`, remapped and weighted when the model is vocabulary-quantized."
+    "The vectors of token `ids`, through `token_mapping` and scaled by `weights` when the model has them."
     emb = self.embedding[ids if self.token_mapping is None else self.token_mapping[ids]]
     return emb * self.weights[ids][:, None] if self.weights is not None else emb
 
 @patch
 def _encode_batch(self:LeanModel, sentences, max_length):
-    "One batch: model2vec stacks the means, so an empty text's float64 zero row makes its whole batch float64."
+    "Encode one batch as model2vec does, where an empty text's float64 zero row makes the batch float64."
     out = np.stack([self._rows(o).mean(axis=0) if o else np.zeros(self.dim) for o in self.tokenize(sentences, max_length)])
     return out / (np.linalg.norm(out, axis=1, keepdims=True) + 1e-32) if self.normalize else out
 
 @patch
 def encode(self:LeanModel, sentences, show_progress_bar=False, max_length=512, batch_size=1024, use_multiprocessing=True, multiprocessing_threshold=10_000, **kwargs):
-    "Each sentence's mean token vector (unit length when `normalize`), as `StaticModel.encode`; one string gives one vector."
+    "The mean token vector of each text, unit length when `normalize` is set, as `StaticModel.encode` gives it."
     one = isinstance(sentences, str)
     xs = [sentences] if one else list(sentences)
     if not xs: return np.zeros((0, self.dim), self.embedding.dtype)
@@ -79,7 +79,7 @@ def encode(self:LeanModel, sentences, show_progress_bar=False, max_length=512, b
 
 @patch
 def encode_as_sequence(self:LeanModel, sentences, max_length=None, batch_size=1024, show_progress_bar=False, use_multiprocessing=True, multiprocessing_threshold=10_000):
-    "Each sentence's token vectors, `(n_tokens, dim)`, as `StaticModel.encode_as_sequence`."
+    "The token vectors of each text, shape `(n_tokens, dim)`, as `StaticModel.encode_as_sequence` gives them."
     one = isinstance(sentences, str)
     xs = [sentences] if one else list(sentences)
     out = [self._rows(o) if o else np.zeros((0, self.dim)) for b in _batches(xs, batch_size) for o in self.tokenize(b, max_length)]
@@ -87,7 +87,7 @@ def encode_as_sequence(self:LeanModel, sentences, max_length=None, batch_size=10
 
 # %% ../nbs/02_encoder.ipynb #e91068cb
 def load(path, normalize=None, token=None, subfolder=None, force_download=False, lean=True, shared=True, fallback=True):
-    "A `LeanModel` for `path`, else model2vec's `StaticModel` with a logged warning; `fallback=False` raises instead."
+    "Load `path` as a `LeanModel`, falling back to model2vec's `StaticModel` with a warning unless `fallback=False`."
     try: return LeanModel.from_pretrained(path, token=token, normalize=normalize, subfolder=subfolder, force_download=force_download, lean=lean, shared=shared)
     except Exception as e:
         if not fallback: raise
@@ -99,7 +99,7 @@ def load(path, normalize=None, token=None, subfolder=None, force_download=False,
 
 # %% ../nbs/02_encoder.ipynb #c807791f
 def same_as_model2vec(path, txts=None, max_length=512, seq=200):
-    "Whether `load(path)` matches model2vec on `txts` (default `corpus()`): a dict of the checks."
+    "Compare `load(path)` with model2vec on `txts`, default `corpus()`, returning a dict of the checks."
     from model2vec import StaticModel
     from laghu.core import corpus
     txts = ifnone(txts, corpus())

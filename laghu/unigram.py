@@ -33,7 +33,7 @@ def _vocab(t, fn):
     return ids, scores, v0, c.start()
 
 def read_vocab(fn):
-    "Unigram tokenizer.json `fn` as (piece → id, scores, the JSON with the vocabulary emptied)."
+    "The vocabulary of Unigram tokenizer.json `fn` as `(piece -> id, scores, the JSON without its vocabulary)`."
     with open(fn, 'rb') as f, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as t:
         ids, scores, v0, v1 = _vocab(t, fn)
         return ids, scores, json.loads(t[:v0] + t[v1:])
@@ -62,7 +62,7 @@ def _path(s, start, tid, ids, unk_id, byte_fallback):
     return out[::-1]
 
 def viterbi(s, ids, scores, reach, unk_id, unk_score, byte_fallback=False):
-    "The ids of the best segmentation of `s` into pieces of `ids`, unknown runs fused."
+    "The ids of the highest-scoring split of pre-token `s` into pieces of `ids`."
     n = len(s)
     best, start, tid = [0.0] + [None] * n, [0] * (n + 1), [0] * (n + 1)
     for i in range(n):
@@ -83,12 +83,12 @@ VOCAB_MAGIC, VOCAB_VERSION = b'LAGHUVOC', 1
 _HDR = struct.Struct('<8sIIIiQQQQQdI')   # magic, version, pieces in the trie, longest piece, id of '' or -1, source size and mtime_ns, vocabulary span, trie bytes, lowest score, CRC-32 of the rest
 
 def cache_dir():
-    "Where laghu keeps vocabulary files: `$LAGHU_CACHE`, else `$XDG_CACHE_HOME/laghu`, else `~/.cache/laghu`."
+    "The folder for vocabulary files: `$LAGHU_CACHE`, else `$XDG_CACHE_HOME/laghu`, else `~/.cache/laghu`."
     if p := os.environ.get('LAGHU_CACHE'): return Path(p)
     return Path(os.environ.get('XDG_CACHE_HOME') or Path.home()/'.cache')/'laghu'
 
 def vocab_paths(fn):
-    "Where tokenizer.json `fn`'s vocabulary file may go, in order: `cache_dir()`, named for the file `fn` resolves to, then beside `fn`."
+    "The places the vocabulary file of tokenizer.json `fn` may go, in order: `cache_dir()`, then next to `fn`."
     h = hashlib.blake2b(str(Path(fn).resolve()).encode(), digest_size=8).hexdigest()
     return [cache_dir()/f'{Path(fn).stem}-{h}.laghu', Path(fn).with_suffix('.laghu')]
 
@@ -100,7 +100,7 @@ def _layout(nk, longest):
     return ids, sc, hist, hist + 8 * (longest + 1)
 
 def write_vocab(fn, p):
-    "Write tokenizer.json `fn`'s vocabulary file to `p`, under a temporary name renamed into place."
+    "Build the vocabulary file for tokenizer.json `fn` and write it to `p`."
     import marisa_trie
     st = os.stat(fn)
     with open(fn, 'rb') as f, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as t: ids, scores, v0, v1 = _vocab(t, fn)
@@ -124,9 +124,9 @@ def write_vocab(fn, p):
     log.info(f'laghu: wrote {p} for {fn}')
 
 class Vocab:
-    "A vocabulary file mapped read-only, so processes share its pages: the pieces in a marisa trie, their ids and scores in its key order."
+    "A vocabulary file mapped read-only and shared between processes, holding the pieces, their ids and their scores."
     def __init__(self, p, fn):
-        "Raises `ValueError` when `p` is short, damaged, of another version or older than tokenizer.json `fn`."
+        "Map file `p`, raising `ValueError` when it is short, damaged, of another version, or older than tokenizer.json `fn`."
         import marisa_trie
         with open(p, 'rb') as f: mm, self.ino = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ), os.fstat(f.fileno()).st_ino
         if len(mm) < _HDR.size: raise ValueError(f'{p}: truncated')
@@ -154,7 +154,7 @@ class Vocab:
         return None if k is None else self.ids[k]
 
     def dict(self):
-        "piece → id, as `read_vocab` gives it, in id order."
+        "The whole vocabulary as a dict from piece to id, in id order."
         d = {k: self.ids[i] for k, i in sorted(self.trie.iteritems(), key=lambda o: self.ids[o[1]])}
         if self.empty >= 0: d[''] = self.empty
         return d
@@ -173,7 +173,7 @@ def _spawn(fn, p):
                    check=True, capture_output=True, timeout=600)
 
 def shared_vocab(fn):
-    "Tokenizer.json `fn`'s `Vocab` from the first of `vocab_paths(fn)` that can be had, built when missing, stale or damaged; None if none can."
+    "The `Vocab` for tokenizer.json `fn`, built when missing, stale or damaged, or None when no file can be had."
     if sys.byteorder != 'little' or not importlib.util.find_spec('marisa_trie'): return None
     for p in vocab_paths(fn):
         try: return Vocab(p, fn)
@@ -187,7 +187,7 @@ def shared_vocab(fn):
         except Exception as e: log.info(f'laghu: no vocabulary file at {p}: {e!r}')
 
 def viterbi_trie(s, v, unk_id, unk_score, byte_fallback=False):
-    "`viterbi` over `Vocab` `v`: one prefix search per position finds the pieces that start there."
+    "`viterbi` over the mapped vocabulary `v`, using one trie prefix search per position."
     n, L, pre, ids, sc = len(s), v.longest, v.trie.iter_prefixes_with_ids, v.ids, v.scores
     best, start, tid = [0.0] + [None] * n, [0] * (n + 1), [0] * (n + 1)
     for i in range(n):
@@ -220,15 +220,15 @@ def _pipeline(d, pre):
     return t.normalizer, t.pre_tokenizer, t
 
 class Added:
-    "A set of added tokens found in a string as `tokenizers`' `AddedVocabulary.find_matches` finds them."
+    "Finds added tokens in a string the way `tokenizers`' `AddedVocabulary.find_matches` does."
     def __init__(self, toks, norm=None):
-        "`toks` are matched as written, or as `norm` normalizes them when it is given (`normalized` tokens)."
+        "Match the added tokens `toks` as written, or as normalized by `norm` when it is given."
         self.toks = {(norm.normalize_str(o['content']) if norm else o['content']): (o['id'], o.get('lstrip'), o.get('rstrip')) for o in toks}
         self.toks.pop('', None)
         self.rx = re.compile('|'.join(map(re.escape, sorted(self.toks, key=len, reverse=True)))) if self.toks else None
 
     def split(self, s):
-        "`s` cut into `(text, None)` and `(content, id)` parts, in order, empty text dropped."
+        "Cut `s` into `(text, None)` and `(token, id)` parts, in order."
         if not self.rx: return [(s, None)] if s else []
         out, prev = [], 0
         for m in self.rx.finditer(s):
@@ -243,9 +243,9 @@ class Added:
         return out
 
 class Unigram:
-    "A Unigram tokenizer.json's `encode_batch(texts, add_special_tokens=False)` ids, from a mapped vocabulary or a dict."
+    "A Unigram tokenizer that gives the same ids as `tokenizers`' `encode_batch(texts, add_special_tokens=False)`."
     def __init__(self, fn, shared=True):
-        "`shared` maps the vocabulary from a file every process shares (`shared_vocab`); else, or when that cannot be had, it goes in a dict."
+        "Load tokenizer.json `fn`, mapping the vocabulary from a shared file when `shared` is set and possible, else using a dict."
         self.mapped = shared_vocab(fn) if shared else None
         if self.mapped is not None: d = self.mapped.cfg
         else: self.ids, self.scores, d = read_vocab(fn)
@@ -280,7 +280,7 @@ class Unigram:
         return viterbi(q, self.ids, self.scores, self.reach, self.unk_id, self.unk_score, self.byte_fallback)
 
     def word(self, q):
-        "The ids of pre-token `q`; one of at most `WORD_LEN` characters, as natural text repeats them, from a cache of `WORD_CACHE`."
+        "The ids of pre-token `q`, cached when it is at most `WORD_LEN` characters long."
         return self._cached(q) if len(q) <= WORD_LEN else self._viterbi(q)
 
     def _first(self, s):
@@ -313,7 +313,7 @@ class Unigram:
         return out
 
     def __call__(self, txts):
-        "The ids of each of `txts`, as one batch: truncated and padded when tokenizer.json says so."
+        "The ids of each text in `txts` as one batch, truncated and padded when tokenizer.json asks for it."
         out = [self.encode(t) for t in txts]
         if t := self.trunc:
             L, left = t['max_length'], t.get('direction') == 'Left'
@@ -332,12 +332,12 @@ class Unigram:
         return None if self.model_unk is None else self.vocab()[self.model_unk]
 
     def vocab(self):
-        "`Tokenizer.get_vocab()`: piece → id, the added tokens over the model's."
+        "The vocabulary as `Tokenizer.get_vocab()` gives it, added tokens included."
         return {**(self.ids if self.mapped is None else self.mapped.dict()), **self.added}
 
 # %% ../nbs/01_unigram.ipynb #4946b03a
 class HFTok:
-    "`tokenizers`' own encoding, as model2vec calls it."
+    "A `tokenizers` tokenizer with the attributes model2vec reads."
     def __init__(self, fn):
         self.tok = Tokenizer.from_file(str(fn))
         v = self.tok.get_vocab()
@@ -347,13 +347,13 @@ class HFTok:
         self._enc = getattr(self.tok, 'encode_batch_fast', self.tok.encode_batch)
 
     def __call__(self, txts):
-        "The ids of each of `txts`, one batch as `tokenizers` encodes it (padding, if the file asks for it, is per batch)."
+        "The ids of each text in `txts`, encoded as one batch by `tokenizers`."
         return [e.ids for e in self._enc(list(txts), add_special_tokens=False)]
 
     def vocab(self): return self.tok.get_vocab()
 
 def tokenizer(fn, lean=True, shared=True):
-    "A `Unigram` for a Unigram tokenizer.json `fn` when `lean` and it can be done, its vocabulary mapped when `shared`, else an `HFTok`."
+    "A `Unigram` for a Unigram tokenizer.json `fn` when `lean` is set and it supports the file, else an `HFTok`."
     if lean and is_unigram(fn):
         try: return Unigram(fn, shared)
         except NotImplementedError as e: log.info(f'laghu: {e}; tokenizing with tokenizers')

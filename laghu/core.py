@@ -21,7 +21,7 @@ def cached(repo):
     return max(snaps, key=lambda o: o.stat().st_mtime) if snaps else None
 
 def resolve(path, token=None, subfolder=None, force_download=False):
-    "The local folder for `path`: a folder as given, else a complete snapshot of repo id `path` from the cache, else downloaded."
+    "The local folder for `path`: the folder itself, else a complete cached snapshot of repo id `path`, else a fresh download."
     p = Path(path)
     if p.exists(): return p/subfolder if subfolder else p
     p = None if force_download else cached(str(path))
@@ -32,7 +32,7 @@ def resolve(path, token=None, subfolder=None, force_download=False):
 
 # %% ../nbs/00_core.ipynb #b57979e0
 def layout(folder):
-    "The config, table and tokenizer files of the first layout `folder` has, and the table's tensor name, or None."
+    "The config, table and tokenizer paths and the table's tensor name for the first layout `folder` matches, or None."
     folder = Path(folder)
     for c, e, t, nm in LAYOUTS:
         if all((folder/o).exists() for o in (c, e, t)): return AttrDict(cfg=folder/c, emb=folder/e, tok=folder/t, name=nm)
@@ -42,7 +42,7 @@ LAYOUTS = (('config.json', 'model.safetensors', 'tokenizer.json', 'embeddings'),
            ('config_sentence_transformers.json', '0_StaticEmbedding/model.safetensors', '0_StaticEmbedding/tokenizer.json', 'embedding.weight'))
 
 def model_files(folder):
-    "`layout(folder)`, raising when there is none."
+    "`layout(folder)`, raising `FileNotFoundError` when no layout matches."
     if f := layout(folder): return f
     raise FileNotFoundError(f'{folder}: no model2vec, sentence-transformers or 0_StaticEmbedding layout')
 
@@ -52,11 +52,11 @@ ST_DTYPES = dict(F64=np.float64, F32=np.float32, F16=np.float16, I64=np.int64, I
 class UnsupportedDtype(ValueError): "A tensor in a dtype numpy cannot hold."
 
 def st_header(fn):
-    "Safetensors file `fn`'s header and the offset its data starts at."
+    "The header of safetensors file `fn` and the byte offset where its data starts."
     with open(fn, 'rb') as f: n = int.from_bytes(f.read(8), 'little'); return json.loads(f.read(n)), 8 + n
 
 def st_map(fn, names):
-    "Tensors `names` of safetensors file `fn`, memory-mapped read-only; a name the file lacks is None."
+    "The tensors `names` of safetensors file `fn`, mapped read-only, with None for a name the file lacks."
     hdr, at = st_header(fn)
     def _m(k):
         if k not in hdr: return None
@@ -86,19 +86,19 @@ _MODEL = re.compile(rb'"model"\s*:\s*\{')
 _VOCAB = re.compile(rb'"vocab"\s*:\s*([\[{])')
 
 def find_vocab(t):
-    "Where the model's vocabulary opens in tokenizer.json bytes `t`, and its bracket."
+    "The offset where the vocabulary starts in tokenizer.json bytes `t`, and its opening bracket."
     ms = list(_MODEL.finditer(t))
     if not ms: return None, None
     v = _VOCAB.search(t, ms[-1].end())
     return (v.end(), v.group(1)) if v else (None, None)
 
 def is_unigram(fn):
-    "Whether tokenizer.json `fn` holds a Unigram model."
+    "True when tokenizer.json `fn` holds a Unigram model."
     with open(fn, 'rb') as f, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as t: return find_vocab(t)[1] == b'['
 
 # %% ../nbs/00_core.ipynb #13167816
 def try_resolve(repo, **kw):
-    "`resolve(repo)`, or None (logged) when it cannot be had, e.g. offline."
+    "`resolve(repo)`, or None with a logged warning when the model cannot be had, for example offline."
     try: return resolve(repo, **kw)
     except Exception as e: log.warning(f'laghu: {repo} unavailable: {e!r}'); return None
 
@@ -130,7 +130,7 @@ _BLOCKS = [(0x20, 0x7e), (0xa0, 0xff), (0x100, 0x24f), (0x300, 0x36f), (0x370, 0
     (0xac00, 0xadff), (0xfb00, 0xfb4f), (0xff00, 0xffef), (0x1d400, 0x1d4ff), (0x1f300, 0x1f6ff), (0x0, 0x1f), (0x11300, 0x1137f)]
 
 def noise(n=2000, seed=0):
-    "`n` seeded random strings, each from one to three Unicode blocks, with spaces between runs."
+    "`n` reproducible random strings, each drawn from one to three Unicode blocks, with some spaces."
     import random
     r = random.Random(seed); out = []
     for _ in range(n):
@@ -139,7 +139,7 @@ def noise(n=2000, seed=0):
     return out
 
 def corpus(n=2000, seed=0):
-    "SENTENCES, ODD, `noise(n, seed)` and the sentences recombined: about `2.4 * n` texts."
+    "`SENTENCES`, `ODD`, `noise(n, seed)` and variations of the sentences: about `2.4 * n` texts."
     import random
     r = random.Random(seed); ws = ' '.join(SENTENCES).split()
     mix = [' '.join(r.sample(ws, r.randint(1, 20))) for _ in range(n // 2)]

@@ -9,7 +9,7 @@ from fastcore.all import AttrDict
 
 # %% ../nbs/03_bench.ipynb #ad5d5182
 def footprint():
-    "This process's resident, private and peak memory in MB."
+    "The resident, private and peak memory of this process, in MB."
     if platform.system() == 'Darwin':
         buf = (ctypes.c_uint64 * 64)()   # rusage_info_v4 as uint64s: a 16-byte uuid, then resident_size at 8, phys_footprint 9, lifetime_max_phys_footprint 30
         ctypes.CDLL(None).proc_pid_rusage(ctypes.c_int(os.getpid()), 4, buf)
@@ -52,15 +52,15 @@ def _run(code):
     return AttrDict(json.loads(r.stdout.strip().splitlines()[-1]))
 
 def measure(path, how='laghu', n=2000):
-    "Memory (MB) and time (s) of loading `path` with `how` ('laghu' or 'model2vec') and encoding `corpus(n)`, in a new process."
+    "Memory in MB and time in seconds to load `path` with `how` ('laghu' or 'model2vec') and encode `corpus(n)`, in a new process."
     return _run(_PROBE.format(path=str(path), how=how, n=n))
 
 def check(path, n=3000):
-    "`same_as_model2vec(path, corpus(n))` and the model's shape, in a new process."
+    "Run `same_as_model2vec(path, corpus(n))` in a new process and add the model's type and shape."
     return _run(_CHECK.format(path=str(path), n=n))
 
 def row(path, n_check=3000, n_speed=2000):
-    "One model's line: what it is, whether it matches, and both ways' memory and speed."
+    "One model's table row: what it is, whether it matches, and the memory and speed of both loaders."
     r = check(path, n_check); r.model = str(path)
     r.m2v, r.lg = measure(path, 'model2vec', n_speed), measure(path, 'laghu', n_speed)
     return r
@@ -69,7 +69,7 @@ def row(path, n_check=3000, n_speed=2000):
 def same(r): return all(r[k] for k in ('ids', 'dtype', 'f32', 'f16', 'exact', 'seq', 'median', 'unk', 'tokens'))
 
 def table(rows):
-    "Rows of `row` as a markdown table."
+    "Format rows from `row` as a markdown table."
     hd = ('| model | tokenizer | laghu tokenizes with | vocab × dims | dtype | norm | identical | private MB, model2vec → laghu | peak MB, model2vec → laghu | texts/s, model2vec → laghu |\n'
           '|---|---|---|---|---|---|---|---|---|---|\n')
     def ln(r):
