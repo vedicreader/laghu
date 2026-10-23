@@ -6,6 +6,7 @@ build-backend = "maturin"
 name = "laghu-rs"
 dynamic = ["version"]
 description = "The optional Rust core of laghu: normalization, pre-tokenization, Unigram Viterbi and mean pooling over mapped files"
+readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{name = "Karthik", email = "karthik.rajgopal@hotmail.com"}]
