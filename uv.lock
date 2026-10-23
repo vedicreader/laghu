@@ -1271,6 +1271,9 @@ dev = [
 fallback = [
     { name = "model2vec" },
 ]
+rust = [
+    { name = "laghu-rs", marker = "python_full_version >= '3.11'" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1282,6 +1285,7 @@ requires-dist = [
     { name = "fastcore", specifier = ">=1.8" },
     { name = "huggingface-hub", specifier = ">=0.24" },
     { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=7.3.0" },
+    { name = "laghu-rs", marker = "python_full_version >= '3.11' and extra == 'rust'", specifier = ">=0.1.0" },
     { name = "marisa-trie", specifier = ">=1.2" },
     { name = "model2vec", marker = "extra == 'dev'", specifier = ">=0.9,<0.10" },
     { name = "model2vec", marker = "extra == 'fallback'", specifier = ">=0.9,<0.10" },
@@ -1290,10 +1294,19 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.24" },
     { name = "tokenizers", specifier = ">=0.20" },
 ]
-provides-extras = ["dev", "fallback"]
+provides-extras = ["dev", "fallback", "rust"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "laghu", extras = ["dev"] }]
+
+[[package]]
+name = "laghu-rs"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/bc/5ef40c967a1d7f7d0b20596f3f4dd823bb9f3a63d5a1d4d16b696b1b181b/laghu_rs-0.1.0.tar.gz", hash = "sha256:1a7c53a046409d106321c2a7f82426bef8ff92ff46653d67bca243c893dababf", size = 13347, upload-time = "2026-10-23T01:07:51.143Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/31/42/adeeb276ae50300ae576984890957fa0f1a76b601a64830a24c741b7d599/laghu_rs-0.1.0-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:e84833cbf3a890f2366f094f71f68c4e3cb8f9c740904b36c0e81a6ec4e588cd", size = 1422348, upload-time = "2026-10-23T01:07:49.575Z" },
+]
 
 [[package]]
 name = "lark"
