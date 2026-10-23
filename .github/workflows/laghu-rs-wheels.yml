@@ -1,0 +1,45 @@
+name: laghu-rs wheels
+
+on:
+  push:
+    tags: ['laghu-rs-v*']
+  workflow_dispatch:
+
+jobs:
+  wheels:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: macos-14, target: aarch64-apple-darwin}
+          - {os: macos-14, target: x86_64-apple-darwin}
+          - {os: ubuntu-latest, target: x86_64, manylinux: auto}
+          - {os: ubuntu-latest, target: aarch64, manylinux: auto}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --out dist -m rust/Cargo.toml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.target }}
+          path: dist
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist -m rust/Cargo.toml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist

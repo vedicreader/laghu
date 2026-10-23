@@ -1,0 +1,21 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "laghu-rs"
+dynamic = ["version"]
+description = "The optional Rust core of laghu: Unigram Viterbi and mean pooling over mapped files"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "Karthik", email = "karthik.rajgopal@hotmail.com"}]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+]
+
+[project.urls]
+Repository = "https://github.com/vedicreader/laghu"
+
+[tool.maturin]
+module-name = "laghu_rs"
