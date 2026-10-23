@@ -12,20 +12,28 @@ jobs:
       matrix:
         include:
           - {os: macos-14, target: aarch64-apple-darwin}
-          - {os: macos-14, target: x86_64-apple-darwin}
+          - {os: macos-15-intel, target: x86_64-apple-darwin}
           - {os: ubuntu-latest, target: x86_64, manylinux: auto}
-          - {os: ubuntu-latest, target: aarch64, manylinux: auto}
+          - {os: ubuntu-24.04-arm, target: aarch64, manylinux: auto}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      # onig_sys needs a C compiler: Xcode's clang on macOS, the manylinux image's gcc on Linux.
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux }}
           args: --release --out dist -m rust/Cargo.toml
+      - name: Smoke test the wheel with laghu from this repository
+        shell: bash
+        run: |
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install dist/*.whl .
+          /tmp/smoke/bin/pip install "tokenizers==$(/tmp/smoke/bin/python -c 'import laghu_rs; print(laghu_rs.TOKENIZERS)')"
+          /tmp/smoke/bin/python rust/smoke.py
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.target }}
@@ -43,3 +51,20 @@ jobs:
         with:
           name: sdist
           path: dist
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/laghu-rs-v')
+    needs: [wheels, sdist]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: upload
+          args: --non-interactive --skip-existing dist/*

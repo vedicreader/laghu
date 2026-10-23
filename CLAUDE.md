@@ -27,11 +27,40 @@ new feature gets a variant in `01_unigram`'s tests, compared against `encode_bat
 further (at `▁`, say) changes where the float sums start and breaks exact ties the other way: measured, one text in 4,726 differs.
 The spike at the end of `03_bench` records what else was tried (tokie, gigatoken, worker processes) and why none is used.
 
+## The Rust core
+
+`rust/` builds the optional abi3 wheel `laghu-rs` (module `laghu_rs`, Python 3.11+, maturin). laghu imports it if it can and never
+requires it. `Unigram.rs` is a `laghu_rs.Seg`: the same Viterbi search over UTF-8 byte offsets, plus mean pooling over the mapped
+table in `encode`. It is None without `laghu_rs`, with `LAGHU_RUST=0`, with `shared=False`, and when tokenizer.json truncates or pads.
+
+`Unigram.rs_pre` is a `laghu_rs.Pre`: a `Tokenizer` from the `tokenizers` crate built from `_stub(d)`, the tokenizer.json with a
+one-piece model and the added tokens kept. It does added-token extraction, normalization and pre-tokenization, as
+`encode_single_sequence` does before the model, and maps the stub's added-token ids back to tokenizer.json's. `_rs_pre` returns
+None, and Python's `split` feeds `Seg`, in three cases. `laghu_rs.TOKENIZERS` differs from `tokenizers.__version__`. The crate
+raises `ValueError` on the JSON. `Pre.split` differs from `split` on any text in `PROBE` (the `ODD` texts under 10,000 characters),
+which logs a warning.
+
+The `tokenizers` pin in `rust/Cargo.toml` (`=0.23.2`), the `TOKENIZERS` constant in `rust/src/lib.rs` and the Python `tokenizers`
+version laghu is tested with move together, in one commit. Changing one alone switches `rs_pre` off everywhere through the guard,
+or puts a different pre-tokenizer in front of model2vec's ids. The crate needs a C compiler to build `onig_sys`.
+
+Every Rust path is tested against the Python path, `tokenizers` and model2vec: `same` in `01_unigram` runs Rust, Rust with the Python
+split (`phase1`) and Python; `02_encoder` compares vectors on `corpus(3000)`. Build the extension into `.venv` with
+`maturin develop --release -m rust/Cargo.toml` before running the tests, or the Rust cells skip.
+
 ## The vocabulary file
 
-`shared_vocab` maps a Unigram vocabulary from a file built once per tokenizer.json: a marisa trie of the pieces, with the ids and float64
-scores in its key order (`01_unigram`). Bump `VOCAB_VERSION` whenever the layout or what goes into it changes, so old files are built
-again. `shared=False` keeps the dict path; both are tested against `tokenizers`.
+`shared_vocab` maps a Unigram vocabulary from a file built once per tokenizer.json, in a child process (`01_unigram`). Version 2 holds,
+each section aligned by `_up`: the `_HDR` header (magic `LAGHUVOC`, version, counts, the tokenizer.json's size and mtime_ns and
+vocabulary span, the trie's byte length, the lowest score, a CRC-32 of everything after the header); the ids (int32) and float64
+scores in the marisa trie's key order; a count of pieces by length; the marisa trie; then the byte trie for `laghu_rs`. The byte
+trie is a `_CSR` header (magic `LAGHUCSR`, node count, edge count), then each node's first edge (u32, nodes + 1), each edge's child
+node (u32), each node's value (u32, the marisa key index, or `NO_VALUE`) and each edge's byte (u8). A node's edges are in byte
+order. `csr_trie` builds it.
+
+`Vocab.csr` gives the four byte-trie arrays as memoryviews of the mmap. `Seg` reads them through the buffer protocol and never copies
+them: a copy adds 18.7 MB per process for potion-multilingual-128M. Bump `VOCAB_VERSION` whenever the layout or what goes into it
+changes, so old files are built again. `shared=False` keeps the dict path; both are tested against `tokenizers`.
 
 ## Tests need models
 

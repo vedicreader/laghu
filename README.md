@@ -7,7 +7,7 @@
 
 The memory goes on two things. model2vec reads the whole embedding table into each process; for potion-multilingual-128M that is 512 MB. That model’s tokenizer is a Unigram tokenizer, which splits text by choosing the most likely sequence of pieces from a list of 500,353, and the `tokenizers` library keeps a search structure (a character trie) over those pieces that takes about another 610 MB. After encoding, a model2vec process holds about 1.3 GB of private memory, memory that belongs to that process alone and cannot be shared.
 
-laghu avoids both copies. It maps the table from `model.safetensors` into memory read-only, so the operating system loads pages of the file only when they are read, keeps them in its page cache, shares them between every process that maps the same file, and can drop them again when memory is short. For a Unigram model it also replaces the tokenizer’s trie: it builds a vocabulary file once per tokenizer.json, holding the pieces in a compact [marisa trie](https://github.com/pytries/marisa-trie) with their ids and scores, which every process maps and shares in the same way, and it segments text with a Viterbi search written in Python. The text normalization and the first split into words still come from `tokenizers`, built from the same tokenizer.json with the vocabulary left out. The same model then takes about 60 MB of private memory per process, most of it the Python interpreter and its imports.
+laghu avoids both copies. It maps the table from `model.safetensors` into memory read-only, so the operating system loads pages of the file only when they are read, keeps them in its page cache, shares them between every process that maps the same file, and can drop them again when memory is short. For a Unigram model it also replaces the tokenizer’s trie: it builds a vocabulary file once per tokenizer.json, holding the pieces in a compact [marisa trie](https://github.com/pytries/marisa-trie) with their ids and scores, which every process maps and shares in the same way, and it segments text with a Viterbi search written in Python, or in Rust when the optional `laghu-rs` wheel is installed. The text normalization and the first split into words still come from `tokenizers`, built from the same tokenizer.json with the vocabulary left out. The same model then takes about 60 MB of private memory per process, most of it the Python interpreter and its imports.
 
 Models whose tokenizer is WordPiece, BPE or word-level keep using `tokenizers` for tokenizing. laghu still maps their tables, so how much they save depends on how large the table is compared with the tokenizer.
 
@@ -18,6 +18,30 @@ uv add laghu        # or: pip install laghu
 ```
 
 model2vec is not a dependency. Install the extra, `uv add 'laghu[fallback]'`, if you want [`load`](https://vedicreader.github.io/laghu/encoder.html#load) to fall back to model2vec when laghu cannot read a model, or want to use [`same_as_model2vec`](https://vedicreader.github.io/laghu/encoder.html#same_as_model2vec). The extra installs model2vec 0.9, which laghu matches. model2vec 0.10 gives different vectors, and its `tokenize` no longer takes `max_length`.
+
+laghu has an optional Rust core, the wheel `laghu-rs` (module `laghu_rs`, Python 3.11 or later). Install it with `pip install laghu-rs`, or with laghu’s extra, `uv add 'laghu[rust]'`, from laghu 0.3.0.
+
+## The optional Rust core
+
+With `laghu-rs` installed, laghu tokenizes Unigram models in Rust, on all cores, with the GIL released. `laghu_rs` normalizes, splits out added tokens and pre-tokenizes with the `tokenizers` crate, then runs laghu’s Viterbi search over a byte trie in the shared vocabulary file. For a float32 table without weights or a token mapping, it also averages the vectors. The ids and vectors are the same as the pure Python path’s and model2vec’s, bit for bit.
+
+potion-multilingual-128M encodes 500-character chunks at 39,750 chunks/s with `laghu-rs` on the 14 cores of an M3 Max. The same model encodes 1,736 chunks/s in pure Python and 5,276 chunks/s with model2vec 0.9. The process holds 64 MB of private memory after encoding with `laghu-rs`.
+
+laghu tokenizes in pure Python when any of these is true:
+
+- `laghu_rs` cannot be imported.
+- `LAGHU_RUST=0` is set when the model is loaded.
+- The model is loaded with `shared=False`, or its tokenizer.json truncates or pads.
+
+laghu never uses `laghu-rs` for a model it tokenizes with `tokenizers`: WordPiece, BPE and WordLevel models, and Unigram models that use a feature laghu does not reproduce.
+
+laghu splits text in Python and segments it in Rust when any of these is true:
+
+- `laghu_rs.TOKENIZERS`, the `tokenizers` crate version `laghu-rs` was built with, differs from the installed Python `tokenizers`. `laghu-rs` 0.1.0 is built with 0.23.2.
+- The `tokenizers` crate cannot read the tokenizer.json.
+- The crate splits any text in `PROBE`, 46 of laghu’s built-in difficult texts, differently from laghu’s Python split. laghu logs a warning.
+
+The ids are the same on every path.
 
 ## Use
 
@@ -62,7 +86,7 @@ The result says, for each check, whether the two loaders agreed: the token ids (
 
 ## What matches, and what it costs
 
-Every model below gives model2vec’s ids and vectors, bit for bit, on 4,726 texts. The texts include prose in 36 languages and random strings from 30 Unicode blocks, and also control characters, special tokens, emoji sequences, combining marks, bidirectional text controls and a 200,000-character string. Each memory figure comes from a fresh process. On macOS it is `phys_footprint` after encoding, and `lifetime_max_phys_footprint` for the peak. On Linux the same columns would hold `RssAnon` and the peak resident memory `VmHWM`. Speed is `encode` over 3,226 texts on an M3 Max. The “laghu tokenizes with” column says whether laghu used its Python Viterbi or `tokenizers`.
+Every model below gives model2vec’s ids and vectors, bit for bit, on 4,726 texts. The texts include prose in 36 languages and random strings from 30 Unicode blocks, and also control characters, special tokens, emoji sequences, combining marks, bidirectional text controls and a 200,000-character string. Each memory figure comes from a fresh process. On macOS it is `phys_footprint` after encoding, and `lifetime_max_phys_footprint` for the peak. On Linux the same columns would hold `RssAnon` and the peak resident memory `VmHWM`. Speed is `encode` over 3,226 texts on an M3 Max. The “laghu tokenizes with” column says whether laghu used its Python Viterbi or `tokenizers`. The table was measured without `laghu-rs`.
 
 | model | tokenizer | laghu tokenizes with | vocab × dims | dtype | norm | identical | private MB, model2vec → laghu | peak MB, model2vec → laghu | texts/s, model2vec → laghu |
 |----|----|----|----|----|----|----|----|----|----|
@@ -95,7 +119,7 @@ Every model below gives model2vec’s ids and vectors, bit for bit, on 4,726 tex
 
 `+map` marks a vocabulary-quantized model, which stores fewer rows than it has tokens and a mapping from each token to its row. `+weights` marks a model that scales each token’s vector by a stored weight. The potion-multilingual-128M row was measured again on 2026-10-13 with the shared vocabulary file. The other Unigram rows were measured with the vocabulary in a dict, which cost potion-multilingual-128M about 80 MB more private memory per process.
 
-For Unigram models laghu is slower, at between about a third of model2vec’s rate and about the same. `tokenizers` spreads a batch over all cores, while the Python Viterbi runs on one. These are batch measurements and say nothing about the time to encode a single query.
+Without `laghu-rs`, laghu is slower for Unigram models, at between about a third of model2vec’s rate and about the same. `tokenizers` spreads a batch over all cores, while the Python Viterbi runs on one. With `laghu-rs`, laghu also runs on all cores and is faster than model2vec on potion-multilingual-128M: 39,750 against 5,276 chunks/s, as measured in [the optional Rust core](#the-optional-rust-core). The other Unigram models have not been measured with `laghu-rs`. These are batch measurements and say nothing about the time to encode a single query.
 
 laghu keeps a cache of words it has already segmented. It helps when the tokenizer first splits the text into words, as jina-v3, bge-m3 and multilingual-e5 do: natural text runs 1.6 to 1.9 times faster on a first pass and 3 to 5 times faster when the same text comes again. The [bench](https://vedicreader.github.io/laghu/bench.html) page records these measurements and why two faster Rust tokenizers, tokie and gigatoken, were not adopted.
 
@@ -104,7 +128,7 @@ For the other models both loaders tokenize with the same `tokenizers` code. Thei
 ## What is not supported
 
 - Quantizing or truncating a model while loading it (model2vec’s `quantize_to`, `dimensionality` and `vocabulary_quantization`). Each would make a new copy of the table, which is what laghu exists to avoid. Load with model2vec if you need them.
-- A Unigram model with `single_word` added tokens is tokenized with `tokenizers`, though its table is still mapped. The Rust code decides where a word ends with Unicode’s Alphabetic property, and Python’s `str.isalpha` does not match it.
+- A Unigram model with `single_word` added tokens is tokenized with `tokenizers`, though its table is still mapped. `tokenizers` decides where a word ends with Unicode’s Alphabetic property, and Python’s `str.isalpha` does not match it.
 - `use_multiprocessing` is accepted and ignored; the result is the same.
 - `encode([])` returns an empty array of shape `(0, dim)`, where model2vec raises.
 
