@@ -1,11 +1,18 @@
 //! The optional Rust core of laghu: Unigram Viterbi over byte offsets, searching a CSR byte trie mapped from laghu's
 //! vocabulary file, and mean pooling over a mapped float32 table, batched over threads with the GIL released.
-//! Python still normalizes and pre-tokenizes; every result must equal laghu's Python path, and model2vec's, bit for bit.
+//! `Pre` normalizes, splits out added tokens and pre-tokenizes with the `tokenizers` crate, the version Python `tokenizers` has,
+//! so whole texts can go to the threads; every result must equal laghu's Python path, and model2vec's, bit for bit.
 use pyo3::buffer::{Element, PyBuffer};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyString};
+use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use tokenizers::{OffsetReferential, OffsetType, PreTokenizer, Tokenizer};
+
+/// The `tokenizers` version pinned in Cargo.toml, which Python `tokenizers` must also be for `Pre` to be used.
+const TOKENIZERS: &str = "0.23.2";
 
 const NONE: u32 = u32::MAX;
 
@@ -23,7 +30,60 @@ impl<T: Element> Arr<T> {
     fn s(&self) -> &[T] { unsafe { std::slice::from_raw_parts(self.ptr as *const T, self.len) } }
 }
 
+#[derive(IntoPyObject)]
 enum Item { W(String), I(i64) }
+
+enum Part<'a> { W(&'a str), I(i64) }
+
+/// A text's normalization, added-token split and pre-tokenization, done as `TokenizerImpl::encode_single_sequence` does them,
+/// by a `Tokenizer` whose model is a stub: `real` takes the stub's added-token ids to the ids in tokenizer.json.
+#[pyclass(frozen)]
+struct Pre { tok: Tokenizer, real: HashMap<u32, i64> }
+
+impl Pre {
+    /// `f` on each pre-token and each added token's id of `s`, in order.
+    fn each(&self, s: &str, mut f: impl FnMut(Part) -> Result<(), String>) -> Result<(), String> {
+        let mut pts = self.tok.get_added_vocabulary().extract_and_normalize(self.tok.get_normalizer(), s);
+        if let Some(p) = self.tok.get_pre_tokenizer() { p.pre_tokenize(&mut pts).map_err(|e| e.to_string())?; }
+        for (w, _, toks) in pts.get_splits(OffsetReferential::Normalized, OffsetType::None) {
+            match toks {
+                Some(ts) => for t in ts { f(Part::I(*self.real.get(&t.id).ok_or_else(|| format!("unknown added token id {}", t.id))?))?; },
+                None => f(Part::W(w))?,
+            }
+        }
+        Ok(())
+    }
+}
+
+#[pymethods]
+impl Pre {
+    /// Build from tokenizer JSON `json` whose model is a stub, with `added` mapping each added token's content to its id.
+    #[new]
+    fn new(json: &str, added: HashMap<String, i64>) -> PyResult<Pre> {
+        let tok = Tokenizer::from_str(json).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let mut real = HashMap::new();
+        for (c, k) in added {
+            let s = tok.token_to_id(&c).ok_or_else(|| PyValueError::new_err(format!("added token {c:?} missing")))?;
+            real.insert(s, k);
+        }
+        Ok(Pre { tok, real })
+    }
+
+    /// Text `s` as the Viterbi search receives it, as laghu's `Unigram.split`: pre-tokens (str) and added-token ids (int).
+    fn split(&self, py: Python<'_>, s: &str) -> PyResult<Vec<Item>> {
+        let mut out = Vec::new();
+        py.detach(|| self.each(s, |p| { out.push(match p { Part::W(w) => Item::W(w.to_owned()), Part::I(k) => Item::I(k) }); Ok(()) }))
+            .map_err(PyValueError::new_err)?;
+        Ok(out)
+    }
+}
+
+/// The texts of a batch: each already split by Python, or whole, for `Pre` to split in the thread that segments it.
+enum Texts<'a> { Split(Vec<Vec<Item>>), Whole(Vec<String>, &'a Pre) }
+
+impl Texts<'_> {
+    fn len(&self) -> usize { match self { Texts::Split(v) => v.len(), Texts::Whole(v, _) => v.len() } }
+}
 
 #[inline(always)]
 fn utf8_len(b: u8) -> usize { if b < 0x80 { 1 } else if b < 0xE0 { 2 } else if b < 0xF0 { 3 } else { 4 } }
@@ -118,16 +178,22 @@ impl Seg {
         Ok(())
     }
 
-    fn text(&self, items: &[Item], drop: Option<i64>, max_len: Option<usize>) -> Result<Vec<i64>, String> {
+    /// The ids of text `i` of `texts`, id `drop` removed and cut to `max_len`.
+    fn text(&self, texts: &Texts, i: usize, drop: Option<i64>, max_len: Option<usize>) -> Result<Vec<i64>, String> {
         let mut out = Vec::new();
-        for it in items { match it { Item::W(s) => self.viterbi(s, &mut out)?, Item::I(k) => out.push(*k) } }
+        match texts {
+            Texts::Split(v) => for it in &v[i] { match it { Item::W(s) => self.viterbi(s, &mut out)?, Item::I(k) => out.push(*k) } },
+            Texts::Whole(v, pre) => pre.each(&v[i], |p| match p { Part::W(w) => self.viterbi(w, &mut out), Part::I(k) => { out.push(k); Ok(()) } })?,
+        }
         if let Some(d) = drop { out.retain(|&k| k != d); }
         if let Some(m) = max_len { out.truncate(m); }
         Ok(out)
     }
 }
 
-fn extract(texts: &Bound<'_, PyList>) -> PyResult<Vec<Vec<Item>>> {
+/// `texts` as whole strings when `pre` is given, else as lists of pre-tokens (str) and added-token ids (int).
+fn extract<'a>(texts: &Bound<'_, PyList>, pre: Option<&'a Pre>) -> PyResult<Texts<'a>> {
+    if let Some(p) = pre { return Ok(Texts::Whole(texts.extract()?, p)); }
     let mut all = Vec::with_capacity(texts.len());
     for t in texts.iter() {
         let t = t.cast_into::<PyList>()?;
@@ -137,7 +203,7 @@ fn extract(texts: &Bound<'_, PyList>) -> PyResult<Vec<Vec<Item>>> {
         }
         all.push(v);
     }
-    Ok(all)
+    Ok(Texts::Split(all))
 }
 
 /// Map `f` over `n` indices on `threads` threads, results in index order.
@@ -197,20 +263,22 @@ impl Seg {
         Ok(out)
     }
 
-    /// The ids of each text, given as a list of pre-tokens (str) and added-token ids (int), id `drop` removed and cut to `max_len`.
-    #[pyo3(signature = (texts, drop=None, max_len=None, threads=1))]
-    fn batch(&self, py: Python<'_>, texts: &Bound<'_, PyList>, drop: Option<i64>, max_len: Option<usize>, threads: usize) -> PyResult<Vec<Vec<i64>>> {
-        let items = extract(texts)?;
-        let r = py.detach(|| par_map(items.len(), threads, |i| self.text(&items[i], drop, max_len)));
+    /// The ids of each text, id `drop` removed and cut to `max_len`. A text is a str split by `pre` when it is given,
+    /// else a list of pre-tokens (str) and added-token ids (int).
+    #[pyo3(signature = (texts, drop=None, max_len=None, threads=1, pre=None))]
+    fn batch(&self, py: Python<'_>, texts: &Bound<'_, PyList>, drop: Option<i64>, max_len: Option<usize>, threads: usize,
+             pre: Option<Bound<'_, Pre>>) -> PyResult<Vec<Vec<i64>>> {
+        let items = extract(texts, pre.as_ref().map(|p| p.get()))?;
+        let r = py.detach(|| par_map(items.len(), threads, |i| self.text(&items, i, drop, max_len)));
         r.into_iter().collect::<Result<Vec<_>, _>>().map_err(PyValueError::new_err)
     }
 
     /// `batch`, then the mean of each text's rows of float32 `table` (rows x dim, C order) written into float32 `out`
     /// (texts x dim), as numpy's `mean(axis=0)`: the first row copied, the rest added in order, divided by the count. Returns the counts.
-    #[pyo3(signature = (texts, table, out, drop=None, max_len=None, threads=1))]
+    #[pyo3(signature = (texts, table, out, drop=None, max_len=None, threads=1, pre=None))]
     fn encode(&self, py: Python<'_>, texts: &Bound<'_, PyList>, table: &Bound<'_, PyAny>, out: &Bound<'_, PyAny>,
-              drop: Option<i64>, max_len: Option<usize>, threads: usize) -> PyResult<Vec<usize>> {
-        let items = extract(texts)?;
+              drop: Option<i64>, max_len: Option<usize>, threads: usize, pre: Option<Bound<'_, Pre>>) -> PyResult<Vec<usize>> {
+        let items = extract(texts, pre.as_ref().map(|p| p.get()))?;
         let tb = PyBuffer::<f32>::get(table)?;
         let ob = PyBuffer::<f32>::get(out)?;
         if tb.dimensions() != 2 || !tb.is_c_contiguous() { return Err(PyValueError::new_err("table must be 2-D C-contiguous float32")); }
@@ -218,7 +286,7 @@ impl Seg {
         if ob.readonly() || !ob.is_c_contiguous() || ob.item_count() != items.len() * dim { return Err(PyValueError::new_err("out must be writable float32 (texts, dim)")); }
         let (tp, op) = (tb.buf_ptr() as usize, ob.buf_ptr() as usize);
         let r = py.detach(|| par_map(items.len(), threads, |i| -> Result<usize, String> {
-            let ids = self.text(&items[i], drop, max_len)?;
+            let ids = self.text(&items, i, drop, max_len)?;
             let table = unsafe { std::slice::from_raw_parts(tp as *const f32, rows * dim) };
             let o = unsafe { std::slice::from_raw_parts_mut((op as *mut f32).add(i * dim), dim) };
             if ids.is_empty() { o.fill(0.0); return Ok(0); }
@@ -239,5 +307,7 @@ impl Seg {
 #[pymodule]
 fn laghu_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Seg>()?;
+    m.add_class::<Pre>()?;
+    m.add("TOKENIZERS", TOKENIZERS)?;
     Ok(())
 }

@@ -96,7 +96,9 @@ if {how!r} == 'model2vec':
     m = StaticModel.from_pretrained(str(resolve({path!r})), force_download=False); rust = False
 else:
     from laghu import load
-    m = load({path!r}, fallback=False); rust = m._pool_rs()
+    m = load({path!r}, fallback=False)
+    if {how!r} == 'phase1': m.tokenizer.rs_pre = None
+    rust = m._pool_rs() and ('split' if m.tokenizer.rs_pre is not None else 'search')
     if {threads}: m.tokenizer.threads = {threads}
 xs = chunks({n}); m.encode(xs[:100]); best = 1e9
 for _ in range(3): t = time.time(); m.encode(xs); best = min(best, time.time() - t)
@@ -115,7 +117,7 @@ print(json.dumps(dict(rust=u.rs is not None, before=f0.private, after=f1.private
 '''
 
 def speed(path, how='rust', threads=0, n=4000):
-    "`chunks(n)` per second, best of three passes, and memory in MB, encoding with `how` ('rust', 'python' or 'model2vec') on `threads` threads (0: all), in a new process."
+    "`chunks(n)` per second, best of three passes, and memory in MB, encoding with `how` ('rust', 'phase1', 'python' or 'model2vec') on `threads` threads (0: all), in a new process."
     return _run(_SPEED.format(path=str(path), how=how, threads=threads, n=n))
 
 def vocab_cost(path):

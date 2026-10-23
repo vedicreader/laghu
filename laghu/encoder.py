@@ -58,8 +58,8 @@ def _cut(self:LeanModel, sentences, max_length):
 def tokenize(self:LeanModel, sentences, max_length=None):
     "The token ids of each text in `sentences`, as `StaticModel.tokenize` gives them."
     sentences = self._cut(sentences, max_length)
-    if (rs := getattr(self.tokenizer, 'rs', None)) is not None:
-        return rs.batch([self.tokenizer.split(s) for s in sentences], self.unk_token_id, max_length, self.tokenizer.threads)
+    if (rs := getattr(u := self.tokenizer, 'rs', None)) is not None:
+        xs, pre = u.rs_texts(sentences); return rs.batch(xs, self.unk_token_id, max_length, u.threads, pre)
     ids = self.tokenizer(sentences)
     if self.unk_token_id is not None: ids = [[k for k in o if k != self.unk_token_id] for o in ids]
     return [o[:max_length] for o in ids] if max_length is not None else ids
@@ -82,7 +82,8 @@ def _encode_batch(self:LeanModel, sentences, max_length):
     if self._pool_rs():
         u, sentences = self.tokenizer, self._cut(sentences, max_length)
         out = np.empty((len(sentences), self.dim), np.float32)
-        n = u.rs.encode([u.split(s) for s in sentences], self.embedding, out, self.unk_token_id, max_length, u.threads)
+        xs, pre = u.rs_texts(sentences)
+        n = u.rs.encode(xs, self.embedding, out, self.unk_token_id, max_length, u.threads, pre)
         if 0 in n: out = out.astype(np.float64)
     else: out = np.stack([self._rows(o).mean(axis=0) if o else np.zeros(self.dim) for o in self.tokenize(sentences, max_length)])
     return out / (np.linalg.norm(out, axis=1, keepdims=True) + 1e-32) if self.normalize else out
