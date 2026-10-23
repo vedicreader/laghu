@@ -2,6 +2,11 @@
 
 <!-- do not remove -->
 
+## 0.3.1
+
+- laghu splits text in Rust when the installed Python `tokenizers` has the same major and minor version as `laghu_rs.TOKENIZERS`. Before, the versions had to match exactly, so installs with `tokenizers` 0.23.1 or 0.23.3 split text in Python. The `PROBE` check still decides.
+- The `tokenizers` crate dependency in `rust/Cargo.toml` is `0.23.2`, a compatible range. It is no longer the exact pin `=0.23.2`.
+
 ## 0.3.0
 
 - laghu uses the optional Rust core `laghu-rs` (module `laghu_rs`) when it is installed: `pip install laghu-rs`, or the new extra `laghu[rust]`. For a Unigram model it normalizes, pre-tokenizes and segments whole batches in Rust on all cores with the GIL released. For a float32 table without weights or a token mapping it also averages the vectors in Rust. Ids and vectors are the same as the pure Python path's and model2vec 0.9's, bit for bit.

@@ -36,13 +36,14 @@ table in `encode`. It is None without `laghu_rs`, with `LAGHU_RUST=0`, with `sha
 `Unigram.rs_pre` is a `laghu_rs.Pre`: a `Tokenizer` from the `tokenizers` crate built from `_stub(d)`, the tokenizer.json with a
 one-piece model and the added tokens kept. It does added-token extraction, normalization and pre-tokenization, as
 `encode_single_sequence` does before the model, and maps the stub's added-token ids back to tokenizer.json's. `_rs_pre` returns
-None, and Python's `split` feeds `Seg`, in three cases. `laghu_rs.TOKENIZERS` differs from `tokenizers.__version__`. The crate
+None, and Python's `split` feeds `Seg`, in three cases. `compatible` finds that `laghu_rs.TOKENIZERS` and `tokenizers.__version__`
+differ in major or minor version. The crate
 raises `ValueError` on the JSON. `Pre.split` differs from `split` on any text in `PROBE` (the `ODD` texts under 10,000 characters),
 which logs a warning.
 
-The `tokenizers` pin in `rust/Cargo.toml` (`=0.23.2`), the `TOKENIZERS` constant in `rust/src/lib.rs` and the Python `tokenizers`
-version laghu is tested with move together, in one commit. Changing one alone switches `rs_pre` off everywhere through the guard,
-or puts a different pre-tokenizer in front of model2vec's ids. The crate needs a C compiler to build `onig_sys`.
+The `tokenizers` dependency in `rust/Cargo.toml` (`0.23.2`, a compatible range), the `TOKENIZERS` constant in `rust/src/lib.rs` and
+the Python `tokenizers` version laghu is tested with must share a minor version. A different minor version switches `rs_pre` off
+everywhere through the guard. `PROBE` guards patch differences. The crate needs a C compiler to build `onig_sys`.
 
 Every Rust path is tested against the Python path, `tokenizers` and model2vec: `same` in `01_unigram` runs Rust, Rust with the Python
 split (`phase1`) and Python; `02_encoder` compares vectors on `corpus(3000)`. Build the extension into `.venv` with

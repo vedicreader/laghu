@@ -37,7 +37,7 @@ laghu never uses `laghu-rs` for a model it tokenizes with `tokenizers`: WordPiec
 
 laghu splits text in Python and segments it in Rust when any of these is true:
 
-- `laghu_rs.TOKENIZERS`, the `tokenizers` crate version `laghu-rs` was built with, differs from the installed Python `tokenizers`. `laghu-rs` 0.1.0 is built with 0.23.2.
+- The installed Python `tokenizers` has a different major or minor version from `laghu_rs.TOKENIZERS`, the `tokenizers` crate version `laghu-rs` was built with. A different patch version is accepted. `laghu-rs` 0.1.0 is built with 0.23.2 and accepts any Python `tokenizers` 0.23.x. The `PROBE` check below still applies.
 - The `tokenizers` crate cannot read the tokenizer.json.
 - The crate splits any text in `PROBE`, 46 of laghu’s built-in difficult texts, differently from laghu’s Python split. laghu logs a warning.
 
@@ -86,36 +86,38 @@ The result says, for each check, whether the two loaders agreed: the token ids (
 
 ## What matches, and what it costs
 
-Every model below gives model2vec’s ids and vectors, bit for bit, on 4,726 texts. The texts include prose in 36 languages and random strings from 30 Unicode blocks, and also control characters, special tokens, emoji sequences, combining marks, bidirectional text controls and a 200,000-character string. Each memory figure comes from a fresh process. On macOS it is `phys_footprint` after encoding, and `lifetime_max_phys_footprint` for the peak. On Linux the same columns would hold `RssAnon` and the peak resident memory `VmHWM`. Speed is `encode` over 3,226 texts on an M3 Max. The “laghu tokenizes with” column says whether laghu used its Python Viterbi or `tokenizers`. The table was measured without `laghu-rs`.
+Every model below gives model2vec’s ids and vectors, bit for bit, on 4,726 texts. The texts include prose in 36 languages and random strings from 30 Unicode blocks, and also control characters, special tokens, emoji sequences, combining marks, bidirectional text controls and a 200,000-character string. Each memory figure comes from a fresh process. On macOS it is `phys_footprint` after encoding, and `lifetime_max_phys_footprint` for the peak. On Linux the same columns would hold `RssAnon` and the peak resident memory `VmHWM`. Speed is `encode` over 3,226 texts on an M3 Max. The “laghu tokenizes with” column says whether laghu used its own Viterbi search, in Python or in Rust with `laghu-rs`, or `tokenizers`. The first two values in the private MB and texts/s columns were measured without `laghu-rs`. The third value was measured with `laghu-rs` active, in the same way. `laghu-rs` changes only how laghu tokenizes Unigram models. Rows tokenized with `tokenizers`, including every WordPiece, BPE and WordLevel row, show `—` for it.
 
-| model | tokenizer | laghu tokenizes with | vocab × dims | dtype | norm | identical | private MB, model2vec → laghu | peak MB, model2vec → laghu | texts/s, model2vec → laghu |
+Of the Unigram rows, only potion-multilingual-128M has been measured with `laghu-rs`. It was measured on 2026-10-23 as the best of three runs, with laghu using Rust for both the split and the search. The machine was loaded: the load average was 6.5 over one minute and about 20 over fifteen. In the same session model2vec encoded 22,846 texts/s and laghu without `laghu-rs` 14,859 texts/s, against 39,105 and 10,902 in the older columns. Compare the `laghu-rs` figure with those same-session figures, not with the older columns. The Rust runs each took 0.025 to 0.077 seconds, and the slowest gave 41,988 texts/s.
+
+| model | tokenizer | laghu tokenizes with | vocab × dims | dtype | norm | identical | private MB, model2vec → laghu → laghu-rs | peak MB, model2vec → laghu | texts/s, model2vec → laghu → laghu-rs |
 |----|----|----|----|----|----|----|----|----|----|
-| potion-base-2M | WordPiece | tokenizers | 29,528 × 64 | float32 | on | yes | 81 → 58 | 82 → 58 | 84,510 → 92,982 |
-| potion-base-4M | WordPiece | tokenizers | 29,528 × 128 | float32 | on | yes | 94 → 62 | 95 → 62 | 87,248 → 90,242 |
-| potion-base-8M | WordPiece | tokenizers | 29,528 × 256 | float32 | on | yes | 114 → 70 | 115 → 70 | 79,415 → 81,810 |
-| potion-base-32M | WordPiece | tokenizers | 63,091 × 512 | float32 | on | yes | 244 → 97 | 244 → 97 | 75,009 → 81,379 |
-| potion-retrieval-32M | WordPiece | tokenizers | 63,091 × 512 | float32 | on | yes | 244 → 97 | 244 → 97 | 70,799 → 79,717 |
-| potion-science-8M | WordPiece | tokenizers | 29,528 × 256 | float32 | on | yes | 113 → 70 | 114 → 70 | 81,008 → 84,532 |
-| potion-code-16M | WordPiece | tokenizers | 61,826 × 256 | float32 +map +weights | on | yes | 147 → 110 | 211 → 117 | 10,674 → 10,425 |
-| potion-code-16M-v2 | WordPiece | tokenizers | 63,457 × 256 | float16 | on | yes | 108 → 101 | 186 → 119 | 21,819 → 22,164 |
-| potion-multilingual-128M | Unigram | Python Viterbi | 500,353 × 256 | float32 | on | yes | 1,348 → 61 | 1,348 → 61 | 39,105 → 10,902 |
-| M2V_base_output | WordPiece | tokenizers | 29,528 × 256 | float32 | off | yes | 112 → 69 | 113 → 69 | 65,460 → 87,100 |
-| M2V_multilingual_output | WordPiece | tokenizers | 501,054 × 256 | float32 | off | yes | 834 → 198 | 842 → 295 | 42,565 → 90,283 |
-| M2V_base_glove | WordLevel | tokenizers | 400,002 × 256 | float32 | off | yes | 656 → 186 | 656 → 194 | 67,028 → 85,058 |
-| M2V_base_glove_subword | WordPiece | tokenizers | 400,779 × 256 | float32 | off | yes | 647 → 178 | 649 → 195 | 66,256 → 85,430 |
-| jina-embeddings-v3-separation-distilled | Unigram | Python Viterbi | 250,002 × 256 | float32 | off | yes | 722 → 88 | 722 → 88 | 51,836 → 20,840 |
-| multilingual-e5-large-m2v | Unigram | Python Viterbi | 250,002 × 512 | float32 | on | yes | 981 → 109 | 981 → 109 | 24,139 → 19,670 |
-| m2v-gemma-embedding-300m | Unigram | Python Viterbi | 255,732 × 256 | float16 +weights | on | yes | 542 → 93 | 542 → 93 | 20,319 → 12,134 |
-| potion-multilingual-128M-i8-tokenade | Unigram | Python Viterbi | 500,353 × 256 | int8 | on | yes | 985 → 138 | 985 → 138 | 27,676 → 12,090 |
-| m2v-qwen3-embedding-0.6b-1024d | Unigram | Python Viterbi | 151,644 × 1024 | float16 +weights | on | yes | 602 → 132 | 602 → 132 | 16,792 → 7,168 |
-| ovos-m2v-intents-es-ES-bne-v5 | Unigram | Python Viterbi | 50,259 × 64 | float32 | on | yes | 169 → 52 | 169 → 52 | 11,786 → 11,265 |
-| m2v-gte-256-edu | Unigram | tokenizers | 313,845 × 256 | float32 | on | yes | 1,028 → 663 | 1,028 → 675 | 25,363 → 24,981 |
-| bge-m3-m2v-256 | Unigram | Python Viterbi | 250,002 × 256 | float32 | off | yes | 725 → 89 | 725 → 89 | 34,518 → 20,670 |
-| potion-mxbai-micro | WordPiece | tokenizers | 2,000 × 256 | int8 +map +weights | on | yes | 90 → 72 | 91 → 72 | 68,385 → 70,998 |
-| NIFE-mxbai-embed-large-v1_model2vec | WordPiece | tokenizers | 107,962 × 1024 | float32 | off | yes | 558 → 106 | 572 → 116 | 41,042 → 26,756 |
-| ovos-m2v-intents-pt-PT-albertina-v5 | BPE | tokenizers | 50,262 × 256 | float32 | on | yes | 162 → 90 | 162 → 90 | 46,343 → 22,813 |
-| F2LLM-v2-330M-model2vec | BPE | tokenizers | 151,644 × 512 | float16 | on | yes | 356 → 171 | 356 → 171 | 28,795 → 40,132 |
-| static-retrieval-multilingual-69m-v1 | BPE | tokenizers | 179,936 × 384 | float32 | off | yes | 537 → 229 | 541 → 263 | 32,235 → 31,848 |
+| potion-base-2M | WordPiece | tokenizers | 29,528 × 64 | float32 | on | yes | 81 → 58 → — | 82 → 58 | 84,510 → 92,982 → — |
+| potion-base-4M | WordPiece | tokenizers | 29,528 × 128 | float32 | on | yes | 94 → 62 → — | 95 → 62 | 87,248 → 90,242 → — |
+| potion-base-8M | WordPiece | tokenizers | 29,528 × 256 | float32 | on | yes | 114 → 70 → — | 115 → 70 | 79,415 → 81,810 → — |
+| potion-base-32M | WordPiece | tokenizers | 63,091 × 512 | float32 | on | yes | 244 → 97 → — | 244 → 97 | 75,009 → 81,379 → — |
+| potion-retrieval-32M | WordPiece | tokenizers | 63,091 × 512 | float32 | on | yes | 244 → 97 → — | 244 → 97 | 70,799 → 79,717 → — |
+| potion-science-8M | WordPiece | tokenizers | 29,528 × 256 | float32 | on | yes | 113 → 70 → — | 114 → 70 | 81,008 → 84,532 → — |
+| potion-code-16M | WordPiece | tokenizers | 61,826 × 256 | float32 +map +weights | on | yes | 147 → 110 → — | 211 → 117 | 10,674 → 10,425 → — |
+| potion-code-16M-v2 | WordPiece | tokenizers | 63,457 × 256 | float16 | on | yes | 108 → 101 → — | 186 → 119 | 21,819 → 22,164 → — |
+| potion-multilingual-128M | Unigram | Python Viterbi, or Rust with laghu-rs | 500,353 × 256 | float32 | on | yes | 1,348 → 61 → 59 | 1,348 → 61 | 39,105 → 10,902 → 130,007 |
+| M2V_base_output | WordPiece | tokenizers | 29,528 × 256 | float32 | off | yes | 112 → 69 → — | 113 → 69 | 65,460 → 87,100 → — |
+| M2V_multilingual_output | WordPiece | tokenizers | 501,054 × 256 | float32 | off | yes | 834 → 198 → — | 842 → 295 | 42,565 → 90,283 → — |
+| M2V_base_glove | WordLevel | tokenizers | 400,002 × 256 | float32 | off | yes | 656 → 186 → — | 656 → 194 | 67,028 → 85,058 → — |
+| M2V_base_glove_subword | WordPiece | tokenizers | 400,779 × 256 | float32 | off | yes | 647 → 178 → — | 649 → 195 | 66,256 → 85,430 → — |
+| jina-embeddings-v3-separation-distilled | Unigram | Python Viterbi, or Rust with laghu-rs | 250,002 × 256 | float32 | off | yes | 722 → 88 → not measured | 722 → 88 | 51,836 → 20,840 → not measured |
+| multilingual-e5-large-m2v | Unigram | Python Viterbi, or Rust with laghu-rs | 250,002 × 512 | float32 | on | yes | 981 → 109 → not measured | 981 → 109 | 24,139 → 19,670 → not measured |
+| m2v-gemma-embedding-300m | Unigram | Python Viterbi, or Rust with laghu-rs | 255,732 × 256 | float16 +weights | on | yes | 542 → 93 → not measured | 542 → 93 | 20,319 → 12,134 → not measured |
+| potion-multilingual-128M-i8-tokenade | Unigram | Python Viterbi, or Rust with laghu-rs | 500,353 × 256 | int8 | on | yes | 985 → 138 → not measured | 985 → 138 | 27,676 → 12,090 → not measured |
+| m2v-qwen3-embedding-0.6b-1024d | Unigram | Python Viterbi, or Rust with laghu-rs | 151,644 × 1024 | float16 +weights | on | yes | 602 → 132 → not measured | 602 → 132 | 16,792 → 7,168 → not measured |
+| ovos-m2v-intents-es-ES-bne-v5 | Unigram | Python Viterbi, or Rust with laghu-rs | 50,259 × 64 | float32 | on | yes | 169 → 52 → not measured | 169 → 52 | 11,786 → 11,265 → not measured |
+| m2v-gte-256-edu | Unigram | tokenizers | 313,845 × 256 | float32 | on | yes | 1,028 → 663 → — | 1,028 → 675 | 25,363 → 24,981 → — |
+| bge-m3-m2v-256 | Unigram | Python Viterbi, or Rust with laghu-rs | 250,002 × 256 | float32 | off | yes | 725 → 89 → not measured | 725 → 89 | 34,518 → 20,670 → not measured |
+| potion-mxbai-micro | WordPiece | tokenizers | 2,000 × 256 | int8 +map +weights | on | yes | 90 → 72 → — | 91 → 72 | 68,385 → 70,998 → — |
+| NIFE-mxbai-embed-large-v1_model2vec | WordPiece | tokenizers | 107,962 × 1024 | float32 | off | yes | 558 → 106 → — | 572 → 116 | 41,042 → 26,756 → — |
+| ovos-m2v-intents-pt-PT-albertina-v5 | BPE | tokenizers | 50,262 × 256 | float32 | on | yes | 162 → 90 → — | 162 → 90 | 46,343 → 22,813 → — |
+| F2LLM-v2-330M-model2vec | BPE | tokenizers | 151,644 × 512 | float16 | on | yes | 356 → 171 → — | 356 → 171 | 28,795 → 40,132 → — |
+| static-retrieval-multilingual-69m-v1 | BPE | tokenizers | 179,936 × 384 | float32 | off | yes | 537 → 229 → — | 541 → 263 | 32,235 → 31,848 → — |
 
 `+map` marks a vocabulary-quantized model, which stores fewer rows than it has tokens and a mapping from each token to its row. `+weights` marks a model that scales each token’s vector by a stored weight. The potion-multilingual-128M row was measured again on 2026-10-13 with the shared vocabulary file. The other Unigram rows were measured with the vocabulary in a dict, which cost potion-multilingual-128M about 80 MB more private memory per process.
 

@@ -3,7 +3,7 @@
 # %% auto #0
 __all__ = ['UNK_PENALTY', 'WORD_CACHE', 'WORD_LEN', 'VOCAB_MAGIC', 'VOCAB_VERSION', 'CSR_MAGIC', 'NO_VALUE', 'PROBE', 'WS',
            'read_vocab', 'viterbi', 'cache_dir', 'vocab_paths', 'csr_trie', 'write_vocab', 'Vocab', 'shared_vocab',
-           'viterbi_trie', 'Added', 'Unigram', 'HFTok', 'tokenizer']
+           'viterbi_trie', 'compatible', 'Added', 'Unigram', 'HFTok', 'tokenizer']
 
 # %% ../nbs/01_unigram.ipynb #d9193c51
 import json, re, os, sys, mmap, struct, zlib, hashlib, tempfile, subprocess, importlib.util, tokenizers, numpy as np
@@ -243,6 +243,10 @@ def _metaspace(pt, scheme):
     if pt.get('type') == 'Metaspace' and pt.get('prepend_scheme') == 'first': pt['prepend_scheme'] = scheme
     return pt
 
+def compatible(a, b):
+    "Whether `tokenizers` versions `a` and `b` share their major and minor number; `PROBE` then decides."
+    return bool(a and b) and str(a).split('.')[:2] == str(b).split('.')[:2]
+
 def _stub(d):
     "Tokenizer JSON `d` with a one-piece model and nothing after pre-tokenization: its normalizer, pre-tokenizer and added tokens."
     d = dict(d, post_processor=None, decoder=None, truncation=None, padding=None)
@@ -319,8 +323,8 @@ class Unigram:
         return laghu_rs.Seg(*v.csr, v.ids, v.scores, self.unk_id, self.unk_score, self.byte_fallback)
 
     def _rs_pre(self, d):
-        "A `laghu_rs.Pre` for tokenizer JSON `d`, or None: a `tokenizers` other than the one it was built with, or a split unlike `split`'s."
-        if getattr(laghu_rs, 'TOKENIZERS', None) != tokenizers.__version__: return None
+        "A `laghu_rs.Pre` for tokenizer JSON `d`, or None: a `tokenizers` of another minor version than the one it was built with, or a split unlike `split`'s."
+        if not compatible(getattr(laghu_rs, 'TOKENIZERS', None), tokenizers.__version__): return None
         try: pre = laghu_rs.Pre(json.dumps(_stub(d)), {k: v for k, v in self.added.items() if k})
         except ValueError as e: log.info('laghu_rs cannot split for this tokenizer: %s', e); return None
         if any(pre.split(s) != self.split(s) for s in PROBE): log.warning('laghu_rs splits text unlike tokenizers; splitting in Python'); return None
