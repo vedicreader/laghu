@@ -15,13 +15,14 @@ jobs:
           - {os: macos-15-intel, target: x86_64-apple-darwin}
           - {os: ubuntu-latest, target: x86_64, manylinux: auto}
           - {os: ubuntu-24.04-arm, target: aarch64, manylinux: auto}
+          - {os: windows-latest, target: x64}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      # onig_sys needs a C compiler: Xcode's clang on macOS, the manylinux image's gcc on Linux.
+      # onig_sys needs a C compiler: Xcode's clang on macOS, the manylinux image's gcc on Linux, MSVC on Windows.
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
@@ -30,10 +31,12 @@ jobs:
       - name: Smoke test the wheel with laghu from this repository
         shell: bash
         run: |
-          python -m venv /tmp/smoke
-          /tmp/smoke/bin/pip install dist/*.whl .
-          /tmp/smoke/bin/pip install "tokenizers==$(/tmp/smoke/bin/python -c 'import laghu_rs; print(laghu_rs.TOKENIZERS)')"
-          /tmp/smoke/bin/python rust/smoke.py
+          python -m venv smoke
+          py=smoke/bin/python; [ -x "$py" ] || py=smoke/Scripts/python.exe
+          "$py" -m pip install dist/*.whl .
+          # any tokenizers of the crate's minor version, which laghu accepts
+          "$py" -m pip install "tokenizers~=$("$py" -c 'import laghu_rs; print(".".join(laghu_rs.TOKENIZERS.split(".")[:2]))').0"
+          "$py" rust/smoke.py
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.target }}

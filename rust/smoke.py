@@ -4,7 +4,8 @@ from pathlib import Path
 import laghu_rs, tokenizers
 from tokenizers import Tokenizer, AddedToken, models, normalizers, pre_tokenizers
 
-assert laghu_rs.TOKENIZERS == tokenizers.__version__, (laghu_rs.TOKENIZERS, tokenizers.__version__)
+from laghu.unigram import compatible
+assert compatible(laghu_rs.TOKENIZERS, tokenizers.__version__), (laghu_rs.TOKENIZERS, tokenizers.__version__)
 
 pieces = ['<unk>', '▁', '▁the', '▁cat', '▁sat', 'the', 'cat', 's', 'a', 't', 'c', 'h', 'e', '▁on', 'on', 'o', 'n', 'm']
 vocab = [(p, 0.0 if i == 0 else -1.0 - len(p) / 10 - i / 100) for i, p in enumerate(pieces)]
@@ -14,7 +15,8 @@ tok.pre_tokenizer = pre_tokenizers.Metaspace()
 tok.add_special_tokens([AddedToken('<mask>', normalized=False)])
 texts = ['the cat sat on the mat', 'Thé cät <mask> sat', 'ﬁne   spaces\tand\nlines', '', '<mask><mask> x', 'cats on mats ' * 20]
 
-with tempfile.TemporaryDirectory() as d:
+# Windows cannot delete a file that is still mapped; the folder is left to the system there
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
     os.environ['LAGHU_CACHE'] = str(Path(d) / 'cache')
     fn = Path(d) / 'tokenizer.json'; tok.save(str(fn))
     from laghu.unigram import Unigram
