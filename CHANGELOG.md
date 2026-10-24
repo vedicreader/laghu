@@ -2,6 +2,19 @@
 
 <!-- do not remove -->
 
+## 0.4.0
+
+- With `laghu-rs` 0.2.0 installed, laghu tokenizes WordPiece models in Rust when their tokenizer.json has a BertNormalizer, a BertPreTokenizer and a WordPiece model, as the English potion models do. For a float32 table without weights or a token mapping it also averages the vectors in Rust. Ids and vectors are the same as `tokenizers`' and model2vec 0.9's, bit for bit.
+- potion-base-8M encodes 500-character chunks at 432,938 chunks/s with `laghu-rs`, against 55,514 chunks/s with `tokenizers` and 55,600 chunks/s with model2vec 0.9, with 81 MB of private memory against model2vec's 140 MB.
+- `HFTok` has `rs`, a `laghu_rs.WordPiece` or None, and `threads`. `rs` is None when `laghu_rs` cannot be imported or has no `WordPiece`, when `LAGHU_RUST=0` is set as the model loads, when the model is loaded with `lean=False`, when tokenizer.json truncates or pads, when the installed `tokenizers` has another minor version than `laghu_rs.TOKENIZERS`, for any other pipeline or for added tokens that are normalized or use `lstrip`, `rstrip` or `single_word`, and when its ids differ from `tokenizers`' on any text in `PROBE`. The last case logs a warning.
+- `Unigram` and `HFTok` both have `rs_batch` and `rs_encode`, which `LeanModel` calls for either tokenizer.
+- The 0.3.0 notes gave model2vec 5,276 chunks/s on potion-multilingual-128M. That figure was measured with `tokenizers` on one core. On all cores model2vec encodes 21,105 chunks/s, and laghu with `laghu-rs` 42,385 chunks/s.
+
+### laghu-rs 0.2.0
+
+- `laghu_rs.WordPiece` gives the ids of a BertNormalizer, BertPreTokenizer and WordPiece pipeline without the offsets of the `tokenizers` crate, on threads with the GIL released, and averages rows of a mapped float32 table. It is a port of `FastWordPiece` from model2vec-rs (MIT, copyright (c) 2025 The Minish Lab, `LICENSE-model2vec-rs`). It takes NFD and the character classes from the crates `tokenizers` uses, and looks pieces up in the model's vocabulary alone.
+- `Seg.encode` and `WordPiece.encode` average with the same code. `Seg`'s results are unchanged.
+
 ## 0.3.1
 
 - laghu splits text in Rust when the installed Python `tokenizers` has the same major and minor version as `laghu_rs.TOKENIZERS`. Before, the versions had to match exactly, so installs with `tokenizers` 0.23.1 or 0.23.3 split text in Python. The `PROBE` check still decides.

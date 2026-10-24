@@ -232,7 +232,7 @@ def viterbi_trie(s, v, unk_id, unk_score, byte_fallback=False):
     return _path(s, start, tid, v, unk_id, byte_fallback)
 
 # %% ../nbs/01_unigram.ipynb #a88855f9
-PROBE = [s for s in ODD if len(s) < 10_000]   # texts `Unigram._rs_pre` checks laghu_rs's split on, a few milliseconds' worth
+PROBE = [s for s in ODD if len(s) < 10_000]   # texts `Unigram._rs_pre` and `HFTok._rust` check laghu_rs on, a few milliseconds' worth
 WS = frozenset('\t\n\x0b\x0c\r \x85\xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000')   # Rust's char::is_whitespace
 
 def _metaspace(pt, scheme):
@@ -334,6 +334,14 @@ class Unigram:
         "The texts `rs` takes for `txts`, and the `laghu_rs.Pre` that splits them: whole when `rs_pre` is set, else as `split` gives them."
         return (list(txts), self.rs_pre) if self.rs_pre is not None else ([self.split(t) for t in txts], None)
 
+    def rs_batch(self, txts, drop=None, max_len=None):
+        "The ids of each text in `txts` by `rs`, id `drop` removed and cut to `max_len`."
+        xs, pre = self.rs_texts(txts); return self.rs.batch(xs, drop, max_len, self.threads, pre)
+
+    def rs_encode(self, txts, table, out, drop=None, max_len=None):
+        "`rs_batch`, then each text's mean row of float32 `table` written into float32 `out`; returns each text's count of ids."
+        xs, pre = self.rs_texts(txts); return self.rs.encode(xs, table, out, drop, max_len, self.threads, pre)
+
     def _viterbi(self, q):
         if self.mapped is not None: return viterbi_trie(q, self.mapped, self.unk_id, self.unk_score, self.byte_fallback)
         return viterbi(q, self.ids, self.scores, self.reach, self.unk_id, self.unk_score, self.byte_fallback)
@@ -376,7 +384,7 @@ class Unigram:
 
     def __call__(self, txts):
         "The ids of each text in `txts` as one batch, by `laghu_rs` when `rs` is set, truncated and padded when tokenizer.json asks for it."
-        if self.rs is not None: xs, pre = self.rs_texts(txts); return self.rs.batch(xs, threads=self.threads, pre=pre)
+        if self.rs is not None: return self.rs_batch(txts)
         out = [self.encode(t) for t in txts]
         if t := self.trunc:
             L, left = t['max_length'], t.get('direction') == 'Left'
@@ -400,24 +408,46 @@ class Unigram:
 
 # %% ../nbs/01_unigram.ipynb #4946b03a
 class HFTok:
-    "A `tokenizers` tokenizer with the attributes model2vec reads."
-    def __init__(self, fn):
+    "A `tokenizers` tokenizer with the attributes model2vec reads, encoding a BERT WordPiece pipeline by `laghu_rs` when it can."
+    def __init__(self, fn, rust=True):
+        "Load tokenizer.json `fn`, with a `laghu_rs.WordPiece` as `rs` when `rust` is set and `_rust` allows it."
         self.tok = Tokenizer.from_file(str(fn))
         v = self.tok.get_vocab()
         self.n, self.median = len(v), int(np.median([len(o) for o in v])) if v else 0
         unk = getattr(self.tok.model, 'unk_token', None)
         self.unk_token_id = v[unk] if unk is not None else None
         self._enc = getattr(self.tok, 'encode_batch_fast', self.tok.encode_batch)
+        self.rs, self.threads = self._rust(fn) if rust else None, os.cpu_count() or 1
+
+    def _rust(self, fn):
+        "A `laghu_rs.WordPiece` for tokenizer.json `fn`, or None: no extension or one without it, `LAGHU_RUST=0`, truncation or padding to apply, a `tokenizers` of another minor version, a pipeline it does not port, or ids unlike `tokenizers`' on `PROBE`."
+        if getattr(laghu_rs, 'WordPiece', None) is None or os.environ.get('LAGHU_RUST') == '0' or self.tok.truncation or self.tok.padding: return None
+        if not isinstance(self.tok.model, tokenizers.models.WordPiece): return None
+        if not compatible(laghu_rs.TOKENIZERS, tokenizers.__version__): return None
+        try: wp = laghu_rs.WordPiece(Path(fn).read_text(encoding='utf-8'))
+        except ValueError as e: log.info('laghu_rs cannot tokenize this tokenizer: %s', e); return None
+        if wp.batch(PROBE) != self._hf(PROBE): log.warning('laghu_rs.WordPiece gives ids unlike tokenizers; tokenizing with tokenizers'); return None
+        return wp
+
+    def _hf(self, txts): return [e.ids for e in self._enc(list(txts), add_special_tokens=False)]
+
+    def rs_batch(self, txts, drop=None, max_len=None):
+        "The ids of each text in `txts` by `rs`, id `drop` removed and cut to `max_len`."
+        return self.rs.batch(list(txts), drop, max_len, self.threads)
+
+    def rs_encode(self, txts, table, out, drop=None, max_len=None):
+        "`rs_batch`, then each text's mean row of float32 `table` written into float32 `out`; returns each text's count of ids."
+        return self.rs.encode(list(txts), table, out, drop, max_len, self.threads)
 
     def __call__(self, txts):
-        "The ids of each text in `txts`, encoded as one batch by `tokenizers`."
-        return [e.ids for e in self._enc(list(txts), add_special_tokens=False)]
+        "The ids of each text in `txts`, encoded as one batch by `rs` when it is set, else by `tokenizers`."
+        return self.rs_batch(txts) if self.rs is not None else self._hf(txts)
 
     def vocab(self): return self.tok.get_vocab()
 
 def tokenizer(fn, lean=True, shared=True):
-    "A `Unigram` for a Unigram tokenizer.json `fn` when `lean` is set and it supports the file, else an `HFTok`."
+    "A `Unigram` for a Unigram tokenizer.json `fn` when `lean` is set and it supports the file, else an `HFTok`, with its Rust path when `lean` is set."
     if lean and is_unigram(fn):
         try: return Unigram(fn, shared)
         except NotImplementedError as e: log.info(f'laghu: {e}; tokenizing with tokenizers')
-    return HFTok(fn)
+    return HFTok(fn, lean)

@@ -58,8 +58,7 @@ def _cut(self:LeanModel, sentences, max_length):
 def tokenize(self:LeanModel, sentences, max_length=None):
     "The token ids of each text in `sentences`, as `StaticModel.tokenize` gives them."
     sentences = self._cut(sentences, max_length)
-    if (rs := getattr(u := self.tokenizer, 'rs', None)) is not None:
-        xs, pre = u.rs_texts(sentences); return rs.batch(xs, self.unk_token_id, max_length, u.threads, pre)
+    if self.tokenizer.rs is not None: return self.tokenizer.rs_batch(sentences, self.unk_token_id, max_length)
     ids = self.tokenizer(sentences)
     if self.unk_token_id is not None: ids = [[k for k in o if k != self.unk_token_id] for o in ids]
     return [o[:max_length] for o in ids] if max_length is not None else ids
@@ -72,18 +71,17 @@ def _rows(self:LeanModel, ids):
 
 @patch
 def _pool_rs(self:LeanModel):
-    "Whether `laghu_rs` can both tokenize and pool: a Unigram on the Rust path, and a C-contiguous float32 table without weights or a token mapping."
+    "Whether `laghu_rs` can both tokenize and pool: a tokenizer on the Rust path, and a C-contiguous float32 table without weights or a token mapping."
     e = self.embedding
-    return getattr(self.tokenizer, 'rs', None) is not None and self.weights is None and self.token_mapping is None and e.dtype == np.float32 and e.flags.c_contiguous
+    return self.tokenizer.rs is not None and self.weights is None and self.token_mapping is None and e.dtype == np.float32 and e.flags.c_contiguous
 
 @patch
 def _encode_batch(self:LeanModel, sentences, max_length):
     "Encode one batch as model2vec does, where an empty text's float64 zero row makes the batch float64."
     if self._pool_rs():
-        u, sentences = self.tokenizer, self._cut(sentences, max_length)
+        sentences = self._cut(sentences, max_length)
         out = np.empty((len(sentences), self.dim), np.float32)
-        xs, pre = u.rs_texts(sentences)
-        n = u.rs.encode(xs, self.embedding, out, self.unk_token_id, max_length, u.threads, pre)
+        n = self.tokenizer.rs_encode(sentences, self.embedding, out, self.unk_token_id, max_length)
         if 0 in n: out = out.astype(np.float64)
     else: out = np.stack([self._rows(o).mean(axis=0) if o else np.zeros(self.dim) for o in self.tokenize(sentences, max_length)])
     return out / (np.linalg.norm(out, axis=1, keepdims=True) + 1e-32) if self.normalize else out

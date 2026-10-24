@@ -98,7 +98,7 @@ else:
     from laghu import load
     m = load({path!r}, fallback=False)
     if {how!r} == 'phase1': m.tokenizer.rs_pre = None
-    rust = m._pool_rs() and ('split' if m.tokenizer.rs_pre is not None else 'search')
+    rust = m._pool_rs() and ('wordpiece' if not m.lean else 'split' if m.tokenizer.rs_pre is not None else 'search')
     if {threads}: m.tokenizer.threads = {threads}
 xs = chunks({n}); m.encode(xs[:100]); best = 1e9
 for _ in range(3): t = time.time(); m.encode(xs); best = min(best, time.time() - t)

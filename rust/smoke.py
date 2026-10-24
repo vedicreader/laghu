@@ -1,4 +1,4 @@
-"Check an installed laghu-rs wheel: its `tokenizers` version, and laghu's Rust ids against `tokenizers` on a tiny Unigram model."
+"Check an installed laghu-rs wheel: its `tokenizers` version, and laghu's Rust ids against `tokenizers` on a tiny Unigram model and a tiny WordPiece model."
 import os, sys, tempfile
 from pathlib import Path
 import laghu_rs, tokenizers
@@ -15,6 +15,13 @@ tok.pre_tokenizer = pre_tokenizers.Metaspace()
 tok.add_special_tokens([AddedToken('<mask>', normalized=False)])
 texts = ['the cat sat on the mat', 'Thé cät <mask> sat', 'ﬁne   spaces\tand\nlines', '', '<mask><mask> x', 'cats on mats ' * 20]
 
+words = ['[UNK]', '[MASK]', 'the', 'cat', 'sat', 'on', 'mat', '##s', '##t', 'c', 'a', 't', 's', 'o', 'n', 'm', ',', '!', '中']
+wtok = Tokenizer(models.WordPiece({w: i for i, w in enumerate(words)}, unk_token='[UNK]'))
+wtok.normalizer = normalizers.BertNormalizer()
+wtok.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
+wtok.add_special_tokens([AddedToken('[MASK]', normalized=False)])
+wtexts = ['The CAT sat, on the mats!', 'Thé cät [MASK] sat', 'ﬁne\tlines\x00中文', '', '[MASK][MASK] x', 'cats on mats ' * 20]
+
 # Windows cannot delete a file that is still mapped; the folder is left to the system there
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
     os.environ['LAGHU_CACHE'] = str(Path(d) / 'cache')
@@ -25,4 +32,10 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
     got, want = u(texts), [e.ids for e in tok.encode_batch(texts, add_special_tokens=False)]
     assert got == want, (got, want)
     del u
-print(f'laghu_rs ok: tokenizers {tokenizers.__version__}, {len(texts)} texts match on {sys.platform}')
+    wfn = Path(d) / 'wordpiece.json'; wtok.save(str(wfn))
+    from laghu.unigram import HFTok
+    h = HFTok(wfn)
+    assert h.rs is not None
+    got, want = h(wtexts), [e.ids for e in wtok.encode_batch(wtexts, add_special_tokens=False)]
+    assert got == want, (got, want)
+print(f'laghu_rs ok: tokenizers {tokenizers.__version__}, {len(texts)} Unigram and {len(wtexts)} WordPiece texts match on {sys.platform}')
