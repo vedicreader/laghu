@@ -4,7 +4,7 @@
 
 ## 0.4.1
 
-- The `laghu-rs` sdist and wheels ship its MIT `LICENSE` and the model2vec-rs licence. Before, they shipped no licence file.
+- `laghu-rs` 0.2.1: its sdist and wheels ship its MIT `LICENSE` and the model2vec-rs licence. Before, they shipped no licence file.
 
 ## 0.4.0
 

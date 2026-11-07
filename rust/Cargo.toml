@@ -1,6 +1,6 @@
 [package]
 name = "laghu_rs"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "The optional Rust core of laghu: normalization, pre-tokenization, Unigram Viterbi, WordPiece and mean pooling over mapped files"
 license = "MIT"
