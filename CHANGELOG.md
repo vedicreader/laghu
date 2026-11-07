@@ -2,6 +2,10 @@
 
 <!-- do not remove -->
 
+## 0.4.1
+
+- The `laghu-rs` sdist and wheels ship its MIT `LICENSE` and the model2vec-rs licence. Before, they shipped no licence file.
+
 ## 0.4.0
 
 - With `laghu-rs` 0.2.0 installed, laghu tokenizes WordPiece models in Rust when their tokenizer.json has a BertNormalizer, a BertPreTokenizer and a WordPiece model, as the English potion models do. For a float32 table without weights or a token mapping it also averages the vectors in Rust. Ids and vectors are the same as `tokenizers`' and model2vec 0.9's, bit for bit.

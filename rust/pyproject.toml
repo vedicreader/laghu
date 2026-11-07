@@ -9,6 +9,7 @@ description = "The optional Rust core of laghu: normalization, pre-tokenization,
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
+license-files = ["LICENSE", "LICENSE-model2vec-rs"]
 authors = [{name = "Karthik", email = "karthik.rajgopal@hotmail.com"}]
 classifiers = [
     "Programming Language :: Python :: 3",
