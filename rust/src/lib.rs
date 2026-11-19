@@ -350,13 +350,13 @@ fn bert_words(s: &str) -> Vec<&str> {
     out
 }
 
-/// The ids of a tokenizer.json with a BertNormalizer, a BertPreTokenizer and a WordPiece model, as `encode_single_sequence` gives
+/// The ids of a tokenizer.json with a BertNormalizer, a BertPreTokenizer (alone or followed by FixedLength) and a WordPiece model, as `encode_single_sequence` gives
 /// them, without the offsets and alignments of the `tokenizers` crate. Ported from `FastWordPiece` in model2vec-rs, copyright (c) 2025
 /// The Minish Lab, MIT licence (rust/LICENSE-model2vec-rs). Unlike it, pieces are looked up in the model's vocabulary alone, as
 /// `WordPiece::tokenize` looks them up, and NFD and the character classes come from the crates the `tokenizers` crate uses.
 #[pyclass(frozen)]
 struct WordPiece {
-    vocab: HashMap<String, u32>, single: [i64; 128], unk: i64, max_chars: usize, prefix: String,
+    vocab: HashMap<String, u32>, single: [i64; 128], unk: i64, max_chars: usize, prefix: String, chunk: usize,
     clean: bool, chinese: bool, strip: bool, lower: bool,
     added: Vec<(String, i64)>, first: [bool; 256],
 }
@@ -381,7 +381,11 @@ impl WordPiece {
     fn span(&self, s: &str, out: &mut Vec<i64>, buf: &mut String) {
         if s.is_empty() { return; }
         let n = self.normalize(s);
-        for w in bert_words(&n) { self.word(w, out, buf); }
+        for w in bert_words(&n) {
+            if self.chunk == 0 || w.len() <= self.chunk { self.word(w, out, buf); continue; }
+            let mut at = w.char_indices().map(|(i, _)| i).step_by(self.chunk).peekable();
+            while let Some(a) = at.next() { self.word(&w[a..at.peek().copied().unwrap_or(w.len())], out, buf); }
+        }
     }
 
     /// Text `s` as `tokenizers`' BertNormalizer leaves it: cleaned, CJK ideographs spaced, accents stripped, lowercased.
@@ -441,7 +445,8 @@ impl WordPiece {
 
 #[pymethods]
 impl WordPiece {
-    /// Build from tokenizer JSON `json`. Raises `ValueError` for another model, normalizer or pre-tokenizer, a vocabulary without
+    /// Build from tokenizer JSON `json`. The pre-tokenizer is BertPreTokenizer, or a Sequence of BertPreTokenizer then FixedLength,
+    /// which cuts each word into pieces of `length` characters. Raises `ValueError` for another model, normalizer or pre-tokenizer, a vocabulary without
     /// its unknown token, or an added token matched after normalization or with `lstrip`, `rstrip` or `single_word`.
     #[new]
     fn new(json: &str) -> PyResult<WordPiece> {
@@ -449,7 +454,14 @@ impl WordPiece {
         let tok = Tokenizer::from_str(json).map_err(|e| PyValueError::new_err(e.to_string()))?;
         let ModelWrapper::WordPiece(m) = tok.get_model() else { return bad("model is not WordPiece".into()) };
         let Some(NormalizerWrapper::BertNormalizer(n)) = tok.get_normalizer() else { return bad("normalizer is not BertNormalizer".into()) };
-        let Some(PreTokenizerWrapper::BertPreTokenizer(_)) = tok.get_pre_tokenizer() else { return bad("pre-tokenizer is not BertPreTokenizer".into()) };
+        let chunk = match tok.get_pre_tokenizer() {
+            Some(PreTokenizerWrapper::BertPreTokenizer(_)) => 0,
+            Some(PreTokenizerWrapper::Sequence(s)) => match s.as_ref() {
+                [PreTokenizerWrapper::BertPreTokenizer(_), PreTokenizerWrapper::FixedLength(f)] if f.length > 0 => f.length,
+                _ => return bad("pre-tokenizer Sequence is not BertPreTokenizer then FixedLength".into()),
+            },
+            _ => return bad("pre-tokenizer is not BertPreTokenizer".into()),
+        };
         let vocab = m.get_vocab();
         let Some(&unk) = vocab.get(&m.unk_token) else { return bad(format!("unknown token {:?} not in the vocabulary", m.unk_token)) };
         let mut added = Vec::new();
@@ -465,7 +477,7 @@ impl WordPiece {
         let mut single = [-1i64; 128];
         for (b, k) in single.iter_mut().enumerate() { if let Some(&v) = vocab.get(&(b as u8 as char).to_string()) { *k = v as i64; } }
         Ok(WordPiece {
-            single, unk: unk as i64, max_chars: m.max_input_chars_per_word, prefix: m.continuing_subword_prefix.clone(),
+            single, unk: unk as i64, max_chars: m.max_input_chars_per_word, prefix: m.continuing_subword_prefix.clone(), chunk,
             clean: n.clean_text, chinese: n.handle_chinese_chars, strip: n.strip_accents.unwrap_or(n.lowercase), lower: n.lowercase,
             added, first, vocab,
         })

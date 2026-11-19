@@ -42,7 +42,7 @@ raises `ValueError` on the JSON. `Pre.split` differs from `split` on any text in
 which logs a warning.
 
 `HFTok.rs` is a `laghu_rs.WordPiece`: a port of `FastWordPiece` from model2vec-rs (MIT, `rust/LICENSE-model2vec-rs`) for a tokenizer.json
-with a BertNormalizer, a BertPreTokenizer and a WordPiece model. It gives ids only, and `encode` pools them with `pool`, the same code as
+with a BertNormalizer, a BertPreTokenizer (alone, or followed by FixedLength as in blink-multilingual-64M) and a WordPiece model. It gives ids only, and `encode` pools them with `pool`, the same code as
 `Seg.encode`. It takes NFD and the character classes from `unicode-normalization-alignments` and `unicode_categories`, the crates
 `tokenizers` uses, and looks pieces up in the model's vocabulary alone. It is None without `laghu_rs` or its `WordPiece`, with
 `LAGHU_RUST=0`, with `lean=False`, when tokenizer.json truncates or pads, when `compatible` fails, when the crate raises `ValueError` on
@@ -54,7 +54,7 @@ the Python `tokenizers` version laghu is tested with must share a minor version.
 everywhere through the guard. `PROBE` guards patch differences. The crate needs a C compiler to build `onig_sys`.
 
 Every Rust path is tested against the Python path, `tokenizers` and model2vec: `same` in `01_unigram` runs Rust, Rust with the Python
-split (`phase1`) and Python; `same_wp` runs `WordPiece` on variants of potion-base-8M's tokenizer.json; `02_encoder` compares
+split (`phase1`) and Python; `same_wp` runs `WordPiece` on variants of potion-base-8M's tokenizer.json and on blink-multilingual-64M's; `02_encoder` compares
 vectors on `corpus(3000)` for potion-multilingual-128M and potion-base-8M. Build the extension into `.venv` with
 `maturin develop --release -m rust/Cargo.toml` before running the tests, or the Rust cells skip.
 

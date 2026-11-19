@@ -5,6 +5,9 @@
 ## 0.4.1
 
 - `laghu-rs` 0.2.1: its sdist and wheels ship its MIT `LICENSE` and the model2vec-rs licence. Before, they shipped no licence file.
+- The `rust` extra requires `laghu-rs` 0.2.2.
+- With `laghu-rs` 0.2.2, laghu tokenizes blink-multilingual-64M in Rust. `laghu_rs.WordPiece` accepts a pre-tokenizer that is a `Sequence` of `BertPreTokenizer` then `FixedLength`. It cuts each word into pieces of `length` characters, as `tokenizers` does. Any other `Sequence` raises `ValueError`, and `HFTok` uses `tokenizers`.
+- blink-multilingual-64M gives the same ids as `tokenizers` on 4,777 texts, including words longer than 100 characters and its 30,000 added Chinese and Japanese words. It encodes 78,257 texts/s with `laghu-rs`, against 41,807 texts/s with `tokenizers`, with the same vectors.
 
 ## 0.4.0
 
