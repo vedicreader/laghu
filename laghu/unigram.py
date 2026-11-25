@@ -410,8 +410,9 @@ class Unigram:
 class HFTok:
     "A `tokenizers` tokenizer with the attributes model2vec reads, encoding a BERT WordPiece pipeline by `laghu_rs` when it can."
     def __init__(self, fn, rust=True):
-        "Load tokenizer.json `fn`, with a `laghu_rs.WordPiece` as `rs` when `rust` is set and `_rust` allows it."
+        "Load tokenizer.json `fn` without its padding and truncation, with a `laghu_rs.WordPiece` as `rs` when `rust` is set and `_rust` allows it."
         self.tok = Tokenizer.from_file(str(fn))
+        self.tok.no_padding(); self.tok.no_truncation()   # pad ids would enter each mean; `LeanModel` cuts to `max_length` itself, as model2vec 0.10 does
         v = self.tok.get_vocab()
         self.n, self.median = len(v), int(np.median([len(o) for o in v])) if v else 0
         unk = getattr(self.tok.model, 'unk_token', None)
@@ -420,8 +421,8 @@ class HFTok:
         self.rs, self.threads = self._rust(fn) if rust else None, os.cpu_count() or 1
 
     def _rust(self, fn):
-        "A `laghu_rs.WordPiece` for tokenizer.json `fn`, or None: no extension or one without it, `LAGHU_RUST=0`, truncation or padding to apply, a `tokenizers` of another minor version, a pipeline it does not port, or ids unlike `tokenizers`' on `PROBE`."
-        if getattr(laghu_rs, 'WordPiece', None) is None or os.environ.get('LAGHU_RUST') == '0' or self.tok.truncation or self.tok.padding: return None
+        "A `laghu_rs.WordPiece` for tokenizer.json `fn`, or None: no extension or one without it, `LAGHU_RUST=0`, a `tokenizers` of another minor version, a pipeline it does not port, or ids unlike `tokenizers`' on `PROBE`."
+        if getattr(laghu_rs, 'WordPiece', None) is None or os.environ.get('LAGHU_RUST') == '0': return None
         if not isinstance(self.tok.model, tokenizers.models.WordPiece): return None
         if not compatible(laghu_rs.TOKENIZERS, tokenizers.__version__): return None
         try: wp = laghu_rs.WordPiece(Path(fn).read_text(encoding='utf-8'))

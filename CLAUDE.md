@@ -45,8 +45,10 @@ which logs a warning.
 with a BertNormalizer, a BertPreTokenizer (alone, or followed by FixedLength as in blink-multilingual-64M) and a WordPiece model. It gives ids only, and `encode` pools them with `pool`, the same code as
 `Seg.encode`. It takes NFD and the character classes from `unicode-normalization-alignments` and `unicode_categories`, the crates
 `tokenizers` uses, and looks pieces up in the model's vocabulary alone. It is None without `laghu_rs` or its `WordPiece`, with
-`LAGHU_RUST=0`, with `lean=False`, when tokenizer.json truncates or pads, when `compatible` fails, when the crate raises `ValueError` on
-the JSON, and when its ids differ from `tokenizers`' on `PROBE`, which logs a warning. `Unigram` and `HFTok` both give `rs_batch` and
+`LAGHU_RUST=0`, with `lean=False`, when `compatible` fails, when the crate raises `ValueError` on
+the JSON, and when its ids differ from `tokenizers`' on `PROBE`, which logs a warning. `HFTok` turns off tokenizer.json's padding and
+truncation at load, so a vector never depends on its batch. When an added token is normalized or has lstrip, rstrip or single_word,
+`WordPiece` keeps the parsed `Tokenizer` and splits added tokens with its `AddedVocabulary` (potion-code-16M-v2's `[PAD]`). `Unigram` and `HFTok` both give `rs_batch` and
 `rs_encode`, which is all `encoder` calls.
 
 The `tokenizers` dependency in `rust/Cargo.toml` (`0.23.2`, a compatible range), the `TOKENIZERS` constant in `rust/src/lib.rs` and

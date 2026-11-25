@@ -359,12 +359,16 @@ struct WordPiece {
     vocab: HashMap<String, u32>, single: [i64; 128], unk: i64, max_chars: usize, prefix: String, chunk: usize,
     clean: bool, chinese: bool, strip: bool, lower: bool,
     added: Vec<(String, i64)>, first: [bool; 256],
+    /// The parsed tokenizer when an added token is normalized, or has `lstrip`, `rstrip` or `single_word`: its `AddedVocabulary`
+    /// then splits out the added tokens and normalizes the text between them.
+    tok: Option<Tokenizer>,
 }
 
 impl WordPiece {
     /// The ids of text `s`: added tokens matched in the raw text, leftmost and longest first, and the text between them normalized,
     /// split into words and segmented, as `AddedVocabulary::extract_and_normalize` and the pipeline do.
     fn ids(&self, s: &str) -> Vec<i64> {
+        if let Some(t) = &self.tok { return self.ids_vocab(t, s); }
         let (b, mut out, mut buf) = (s.as_bytes(), Vec::new(), String::new());
         let (mut start, mut i) = (0, 0);
         while i < b.len() {
@@ -378,10 +382,30 @@ impl WordPiece {
         out
     }
 
+    /// The ids of text `s` with added tokens split out by `t`'s `AddedVocabulary::extract_and_normalize`, as `encode_single_sequence`
+    /// does it: tokens without `normalized` matched in the raw text, the rest in the normalized text, each honouring `lstrip`,
+    /// `rstrip` and `single_word`.
+    fn ids_vocab(&self, t: &Tokenizer, s: &str) -> Vec<i64> {
+        let (mut out, mut buf) = (Vec::new(), String::new());
+        let pts = t.get_added_vocabulary().extract_and_normalize(t.get_normalizer(), s);
+        for (w, _, toks) in pts.get_splits(OffsetReferential::Normalized, OffsetType::None) {
+            match toks {
+                Some(ts) => out.extend(ts.iter().map(|k| k.id as i64)),
+                None => self.words(w, &mut out, &mut buf),
+            }
+        }
+        out
+    }
+
     fn span(&self, s: &str, out: &mut Vec<i64>, buf: &mut String) {
         if s.is_empty() { return; }
         let n = self.normalize(s);
-        for w in bert_words(&n) {
+        self.words(&n, out, buf);
+    }
+
+    /// The ids of normalized text `n`: split into words, each cut into pieces of `chunk` characters when `chunk` is set, and segmented.
+    fn words(&self, n: &str, out: &mut Vec<i64>, buf: &mut String) {
+        for w in bert_words(n) {
             if self.chunk == 0 || w.len() <= self.chunk { self.word(w, out, buf); continue; }
             let mut at = w.char_indices().map(|(i, _)| i).step_by(self.chunk).peekable();
             while let Some(a) = at.next() { self.word(&w[a..at.peek().copied().unwrap_or(w.len())], out, buf); }
@@ -447,7 +471,8 @@ impl WordPiece {
 impl WordPiece {
     /// Build from tokenizer JSON `json`. The pre-tokenizer is BertPreTokenizer, or a Sequence of BertPreTokenizer then FixedLength,
     /// which cuts each word into pieces of `length` characters. Raises `ValueError` for another model, normalizer or pre-tokenizer, a vocabulary without
-    /// its unknown token, or an added token matched after normalization or with `lstrip`, `rstrip` or `single_word`.
+    /// its unknown token, or an empty added token. An added token that is normalized, or has `lstrip`, `rstrip` or `single_word`, is matched by
+    /// the `tokenizers` crate's `AddedVocabulary`, which is slower than the hand-written match used otherwise.
     #[new]
     fn new(json: &str) -> PyResult<WordPiece> {
         let bad = |m: String| Err(PyValueError::new_err(m));
@@ -464,11 +489,10 @@ impl WordPiece {
         };
         let vocab = m.get_vocab();
         let Some(&unk) = vocab.get(&m.unk_token) else { return bad(format!("unknown token {:?} not in the vocabulary", m.unk_token)) };
-        let mut added = Vec::new();
+        let (mut added, mut flagged) = (Vec::new(), false);
         for (k, t) in tok.get_added_tokens_decoder() {
-            if t.content.is_empty() || t.normalized || t.lstrip || t.rstrip || t.single_word {
-                return bad(format!("added token {:?} is empty, normalized, or lstrip, rstrip or single_word", t.content));
-            }
+            if t.content.is_empty() { return bad("an added token is empty".into()); }
+            flagged |= t.normalized || t.lstrip || t.rstrip || t.single_word;
             added.push((t.content, k as i64));
         }
         added.sort_by(|a, b| b.0.len().cmp(&a.0.len()).then_with(|| a.0.cmp(&b.0)));
@@ -476,10 +500,11 @@ impl WordPiece {
         for (c, _) in &added { first[c.as_bytes()[0] as usize] = true; }
         let mut single = [-1i64; 128];
         for (b, k) in single.iter_mut().enumerate() { if let Some(&v) = vocab.get(&(b as u8 as char).to_string()) { *k = v as i64; } }
+        let (max_chars, prefix) = (m.max_input_chars_per_word, m.continuing_subword_prefix.clone());
+        let (clean, chinese, strip, lower) = (n.clean_text, n.handle_chinese_chars, n.strip_accents.unwrap_or(n.lowercase), n.lowercase);
         Ok(WordPiece {
-            single, unk: unk as i64, max_chars: m.max_input_chars_per_word, prefix: m.continuing_subword_prefix.clone(), chunk,
-            clean: n.clean_text, chinese: n.handle_chinese_chars, strip: n.strip_accents.unwrap_or(n.lowercase), lower: n.lowercase,
-            added, first, vocab,
+            single, unk: unk as i64, max_chars, prefix, chunk, clean, chinese, strip, lower,
+            added, first, vocab, tok: if flagged { Some(tok) } else { None },
         })
     }
 

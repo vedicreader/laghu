@@ -2,6 +2,16 @@
 
 <!-- do not remove -->
 
+## 0.4.2
+
+- `HFTok` turns off the padding and the truncation of tokenizer.json when it loads a file. `LeanModel` already cuts each text to `max_length`. Before, a tokenizer.json that pads, such as potion-code-16M-v2's, added pad ids to each shorter text in a batch, and the pad vectors went into the average. A 12-token text beside a long one was then 12 ids and 500 pad ids, and its vector had a cosine of 0.96 with its true vector. Now a text's vector does not depend on its batch. It is model2vec 0.9's vector for a batch of one text. model2vec 0.9 has the same fault; model2vec 0.10 turns off padding at load.
+- With `laghu-rs` 0.2.3, laghu tokenizes potion-code-16M-v2 in Rust. Its `[PAD]` added token is normalized, lstrip, rstrip and single_word. The ids equal those of `tokenizers` on 6,374 code chunks and on `PROBE` and texts that hold added tokens in each place the four settings change. It encodes 85,164 500-character chunks/s, against 57,367 chunks/s without `laghu-rs` and 21,485 chunks/s with model2vec 0.9.
+- The `rust` extra requires `laghu-rs` 0.2.3.
+
+### laghu-rs 0.2.3
+
+- `laghu_rs.WordPiece` accepts added tokens that are normalized, or have `lstrip`, `rstrip` or `single_word`. For such a tokenizer.json it finds added tokens with the `AddedVocabulary` of the `tokenizers` crate, which applies these settings as `tokenizers` does. Other tokenizer.json files keep the faster match of `laghu_rs`. It still raises `ValueError` for an empty added token.
+
 ## 0.4.1
 
 - `laghu-rs` 0.2.1: its sdist and wheels ship its MIT `LICENSE` and the model2vec-rs licence. Before, they shipped no licence file.
